@@ -90,7 +90,7 @@ def render_video(story: dict) -> str | None:
         "video_source": "pexels",
         "pexels_api_key": os.environ["PEXELS_API_KEY"],
         "video_count": 1,
-        "subtitle_enabled": False,  # rely on YouTube's own auto-captions
+        "subtitle_enabled": True,  # burned-in — Instagram has no auto-caption equivalent for API-published Reels
     }
     params = TaskVideoRequest(**payload)
     task_id = utils.get_uuid()
@@ -148,10 +148,29 @@ STORAGE_BUCKET = "rendered-videos"
 GRAPH_API_BASE = "https://graph.instagram.com"  # Instagram API with Instagram Login (no linked FB Page needed)
 
 
+def remux_faststart(video_path: str) -> str:
+    """
+    Moves the MP4 moov atom to the front of the file. Standard ffmpeg/moviepy
+    output puts it at the end, which is fine for YouTube but causes Instagram's
+    ingestion to sometimes drop the audio track since it starts processing
+    before the full file (and its audio index) has downloaded. Fast, lossless
+    stream-copy — no re-encoding.
+    """
+    import subprocess
+
+    out_path = video_path.replace(".mp4", "_faststart.mp4")
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", video_path, "-c", "copy", "-movflags", "+faststart", out_path],
+        check=True, capture_output=True,
+    )
+    return out_path
+
+
 def get_signed_video_url(sb, video_path: str, story_id) -> tuple[str, str]:
-    """Uploads the video to the private bucket and returns (storage_path, signed_url)."""
+    """Remuxes for faststart, uploads to the private bucket, returns (storage_path, signed_url)."""
+    faststart_path = remux_faststart(video_path)
     storage_path = f"{story_id}.mp4"
-    with open(video_path, "rb") as f:
+    with open(faststart_path, "rb") as f:
         sb.storage.from_(STORAGE_BUCKET).upload(
             storage_path, f.read(), file_options={"content-type": "video/mp4"}
         )
@@ -229,7 +248,8 @@ def main():
 
     video_path = render_video(story)
     if not video_path:
-        sb.table("story_queue").update({"error": "render failed"}).eq("id", row["id"]).execute()
+        # Release the claim so the next run retries this story instead of leaving it stuck.
+        sb.table("story_queue").update({"error": "render failed", "claimed_at": None}).eq("id", row["id"]).execute()
         sys.exit(1)
 
     youtube_id = None
