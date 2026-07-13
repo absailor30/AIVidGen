@@ -34,10 +34,16 @@ import time
 import requests
 from supabase import create_client
 
+from app.config import config
 from app.models.schema import TaskVideoRequest
 from app.services import state as sm
 from app.services import task
 from app.utils import utils
+
+# AIVidGen reads provider keys from its own config.toml (config.app), not from
+# our env vars directly — inject them at runtime instead of writing a file.
+if os.environ.get("PEXELS_API_KEY"):
+    config.app["pexels_api_keys"] = [os.environ["PEXELS_API_KEY"]]
 
 SATISFYING_KEYWORDS = [
     "slime asmr satisfying",
