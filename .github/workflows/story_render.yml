@@ -2,8 +2,11 @@ name: Twisty! StoryVault — render & upload
 
 on:
   schedule:
-    # 08:00, 14:00, 20:00 UTC — adjust to taste
-    - cron: "0 8,14,20 * * *"
+    # Times below are UTC; posting schedule is 8:30am / 12:30pm / 4:45pm / 8:30pm IST (UTC+5:30)
+    - cron: "0 3 * * *"    # 08:30 IST
+    - cron: "0 7 * * *"    # 12:30 IST
+    - cron: "15 11 * * *"  # 16:45 IST
+    - cron: "0 15 * * *"   # 20:30 IST
   workflow_dispatch: {}
 
 jobs:
@@ -31,4 +34,6 @@ jobs:
           GOOGLE_CLIENT_SECRET_JSON: ${{ secrets.GOOGLE_CLIENT_SECRET_JSON }}
           GOOGLE_TOKEN_PICKLE_B64: ${{ secrets.GOOGLE_TOKEN_PICKLE_B64 }}
           YOUTUBE_PRIVACY: "private"
+          META_PAGE_ACCESS_TOKEN: ${{ secrets.META_PAGE_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
         run: python render_from_supabase.py

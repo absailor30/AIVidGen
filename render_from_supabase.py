@@ -13,6 +13,14 @@ Required environment variables:
   GOOGLE_TOKEN_PICKLE_B64              — base64 of a locally-generated token.pickle
                                           (run youtube_uploader.py once locally first)
   YOUTUBE_PRIVACY                      — optional, default "private"
+  META_PAGE_ACCESS_TOKEN               — long-lived Page token w/ instagram_content_publish
+  IG_USER_ID                           — Instagram Business Account ID (linked to that Page)
+
+Instagram publishing: the rendered video is uploaded to the private Supabase
+Storage bucket "rendered-videos", a short-lived signed URL is generated (the
+only way Instagram's Graph API can fetch it — it doesn't accept raw bytes),
+Instagram is told to fetch + publish from that URL, and the storage object is
+deleted immediately after. Nothing is ever permanently publicly accessible.
 """
 
 import base64
@@ -20,7 +28,9 @@ import os
 import pickle
 import random
 import sys
+import time
 
+import requests
 from supabase import create_client
 
 from app.models.schema import TaskVideoRequest
@@ -127,6 +137,77 @@ def upload_to_youtube(video_path: str, kit: dict) -> str | None:
     return response.get("id")
 
 
+STORAGE_BUCKET = "rendered-videos"
+GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
+
+
+def get_signed_video_url(sb, video_path: str, story_id) -> tuple[str, str]:
+    """Uploads the video to the private bucket and returns (storage_path, signed_url)."""
+    storage_path = f"{story_id}.mp4"
+    with open(video_path, "rb") as f:
+        sb.storage.from_(STORAGE_BUCKET).upload(
+            storage_path, f.read(), file_options={"content-type": "video/mp4"}
+        )
+    signed = sb.storage.from_(STORAGE_BUCKET).create_signed_url(storage_path, 3600)
+    return storage_path, signed["signedURL"]
+
+
+def delete_from_storage(sb, storage_path: str):
+    try:
+        sb.storage.from_(STORAGE_BUCKET).remove([storage_path])
+    except Exception as e:
+        print(f"[instagram] Cleanup warning (non-fatal): {e}")
+
+
+def upload_to_instagram(video_url: str, kit: dict) -> str | None:
+    """Publishes a Reel via the Instagram Graph API using a temporary signed URL."""
+    token = os.environ["META_PAGE_ACCESS_TOKEN"]
+    ig_user_id = os.environ["IG_USER_ID"]
+
+    caption = f"{kit['instagram_caption']}\n\n" + " ".join(
+        f"#{h.lstrip('#')}" for h in kit["instagram_hashtags"]
+    )
+
+    create_resp = requests.post(
+        f"{GRAPH_API_BASE}/{ig_user_id}/media",
+        data={
+            "media_type": "REELS",
+            "video_url": video_url,
+            "caption": caption[:2200],
+            "access_token": token,
+        },
+        timeout=60,
+    )
+    create_resp.raise_for_status()
+    creation_id = create_resp.json()["id"]
+
+    # Poll until Instagram finishes downloading/processing the video
+    deadline = time.time() + 300
+    while time.time() < deadline:
+        status_resp = requests.get(
+            f"{GRAPH_API_BASE}/{creation_id}",
+            params={"fields": "status_code", "access_token": token},
+            timeout=30,
+        )
+        status_resp.raise_for_status()
+        status = status_resp.json().get("status_code")
+        if status == "FINISHED":
+            break
+        if status == "ERROR":
+            raise RuntimeError("Instagram container processing failed")
+        time.sleep(10)
+    else:
+        raise TimeoutError("Instagram container never finished processing")
+
+    publish_resp = requests.post(
+        f"{GRAPH_API_BASE}/{ig_user_id}/media_publish",
+        data={"creation_id": creation_id, "access_token": token},
+        timeout=60,
+    )
+    publish_resp.raise_for_status()
+    return publish_resp.json().get("id")
+
+
 def main():
     theme = sys.argv[1] if len(sys.argv) > 1 else None
     sb = supabase_client()
@@ -151,6 +232,21 @@ def main():
     except Exception as e:
         print(f"[main] YouTube upload failed (video still rendered locally): {e}")
 
+    instagram_id = None
+    if os.environ.get("META_PAGE_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
+        storage_path = None
+        try:
+            storage_path, signed_url = get_signed_video_url(sb, video_path, row["id"])
+            instagram_id = upload_to_instagram(signed_url, story["publishing_kit"])
+            print(f"[main] Posted to Instagram: media id {instagram_id}")
+        except Exception as e:
+            print(f"[main] Instagram publish failed (video still rendered locally): {e}")
+        finally:
+            if storage_path:
+                delete_from_storage(sb, storage_path)
+    else:
+        print("[main] Skipping Instagram — META_PAGE_ACCESS_TOKEN / IG_USER_ID not set.")
+
     dna = story["dna"]
     sb.table("story_state").insert({
         "theme": story["theme"],
@@ -165,8 +261,11 @@ def main():
         "score": story["score"],
         "tracking_tag": story["tracking_tag"],
         "youtube_id": youtube_id,
+        "instagram_id": instagram_id,
     }).execute()
-    sb.table("story_queue").update({"rendered": True, "youtube_id": youtube_id}).eq("id", row["id"]).execute()
+    sb.table("story_queue").update({
+        "rendered": True, "youtube_id": youtube_id, "instagram_id": instagram_id,
+    }).eq("id", row["id"]).execute()
     print("[main] Done.")
 
 
