@@ -13,8 +13,9 @@ Required environment variables:
   GOOGLE_TOKEN_PICKLE_B64              — base64 of a locally-generated token.pickle
                                           (run youtube_uploader.py once locally first)
   YOUTUBE_PRIVACY                      — optional, default "private"
-  META_PAGE_ACCESS_TOKEN               — long-lived Page token w/ instagram_content_publish
-  IG_USER_ID                           — Instagram Business Account ID (linked to that Page)
+  IG_ACCESS_TOKEN                      — token from Meta's "API setup with Instagram login" flow
+                                          (no linked Facebook Page needed)
+  IG_USER_ID                           — Instagram account's numeric user ID (from graph.instagram.com/me)
 
 Instagram publishing: the rendered video is uploaded to the private Supabase
 Storage bucket "rendered-videos", a short-lived signed URL is generated (the
@@ -138,7 +139,7 @@ def upload_to_youtube(video_path: str, kit: dict) -> str | None:
 
 
 STORAGE_BUCKET = "rendered-videos"
-GRAPH_API_BASE = "https://graph.facebook.com/v19.0"
+GRAPH_API_BASE = "https://graph.instagram.com"  # Instagram API with Instagram Login (no linked FB Page needed)
 
 
 def get_signed_video_url(sb, video_path: str, story_id) -> tuple[str, str]:
@@ -160,8 +161,8 @@ def delete_from_storage(sb, storage_path: str):
 
 
 def upload_to_instagram(video_url: str, kit: dict) -> str | None:
-    """Publishes a Reel via the Instagram Graph API using a temporary signed URL."""
-    token = os.environ["META_PAGE_ACCESS_TOKEN"]
+    """Publishes a Reel via the Instagram API (Instagram Login) using a temporary signed URL."""
+    token = os.environ["IG_ACCESS_TOKEN"]
     ig_user_id = os.environ["IG_USER_ID"]
 
     caption = f"{kit['instagram_caption']}\n\n" + " ".join(
@@ -233,7 +234,7 @@ def main():
         print(f"[main] YouTube upload failed (video still rendered locally): {e}")
 
     instagram_id = None
-    if os.environ.get("META_PAGE_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
+    if os.environ.get("IG_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
         storage_path = None
         try:
             storage_path, signed_url = get_signed_video_url(sb, video_path, row["id"])
@@ -245,7 +246,7 @@ def main():
             if storage_path:
                 delete_from_storage(sb, storage_path)
     else:
-        print("[main] Skipping Instagram — META_PAGE_ACCESS_TOKEN / IG_USER_ID not set.")
+        print("[main] Skipping Instagram — IG_ACCESS_TOKEN / IG_USER_ID not set.")
 
     dna = story["dna"]
     sb.table("story_state").insert({
