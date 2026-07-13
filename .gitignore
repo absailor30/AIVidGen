@@ -37,3 +37,8 @@ streamlit.log
 .codegraph
 /docs/superpowers
 .understand-anything
+
+# Local secrets for story pipeline — never commit
+.env.local
+token.pickle
+client_secret.json
