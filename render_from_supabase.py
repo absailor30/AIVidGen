@@ -120,7 +120,29 @@ def render_video(story: dict) -> str | None:
     if not videos:
         print("[render] No output video path found.")
         return None
+
+    _log_stream_diagnostics(videos[0])
     return videos[0]
+
+
+def _log_stream_diagnostics(video_path: str):
+    """Prints whether the rendered file actually has an audio stream, so we
+    can tell a render bug from a delivery bug directly in the CI log instead
+    of inferring it from what YouTube/Instagram show afterward."""
+    import subprocess
+    import imageio_ffmpeg
+
+    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    result = subprocess.run(
+        [ffmpeg_exe, "-i", video_path], capture_output=True, text=True
+    )
+    stream_lines = [line.strip() for line in result.stderr.splitlines() if "Stream #" in line]
+    has_audio = any("Audio:" in line for line in stream_lines)
+    print(f"[render] ffmpeg used: {ffmpeg_exe}")
+    print(f"[render] Streams in rendered file:")
+    for line in stream_lines:
+        print(f"[render]   {line}")
+    print(f"[render] Has audio stream: {has_audio}")
 
 
 def _youtube_credentials():
