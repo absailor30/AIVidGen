@@ -333,7 +333,10 @@ def main():
         print(f"[main] YouTube upload failed (video still rendered locally): {e}")
 
     instagram_id = None
-    if os.environ.get("IG_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
+    if os.environ.get("PAUSE_INSTAGRAM", "false").lower() == "true":
+        print("[main] Skipping Instagram — PAUSE_INSTAGRAM is set (Instagram has no private/draft "
+              "option, so posting is paused while the audio bug is being debugged).")
+    elif os.environ.get("IG_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
         storage_path = None
         try:
             storage_path, signed_url = get_signed_video_url(sb, video_path, row["id"])
