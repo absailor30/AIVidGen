@@ -45,6 +45,9 @@ from app.utils import utils
 if os.environ.get("PEXELS_API_KEY"):
     config.app["pexels_api_keys"] = [os.environ["PEXELS_API_KEY"]]
 
+# "Oddly satisfying" pool kept for optional use, but story-relevant keywords
+# (the story's own §9 keyword string) are the default — see render_video().
+SATISFYING_BACKGROUND = False
 SATISFYING_KEYWORDS = [
     "slime asmr satisfying",
     "kinetic sand cutting satisfying",
@@ -82,7 +85,10 @@ def render_video(story: dict) -> str | None:
     payload = {
         "video_subject": story["title"],
         "video_script": story["story"],
-        "video_terms": random.sample(SATISFYING_KEYWORDS, k=min(4, len(SATISFYING_KEYWORDS))),
+        "video_terms": (
+            random.sample(SATISFYING_KEYWORDS, k=min(4, len(SATISFYING_KEYWORDS)))
+            if SATISFYING_BACKGROUND else story["keywords"]
+        ),
         "video_aspect": "9:16",
         "video_language": "en",
         "voice_name": STORY_VOICE,
