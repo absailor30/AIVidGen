@@ -1135,14 +1135,6 @@ def generate_video(
         threads=params.n_threads or 2,
         logger=None,
         fps=fps,
-        # Force explicit stream mapping. Without -map, ffmpeg's automatic
-        # stream selection across the two -i inputs (raw video piped via
-        # stdin, pre-encoded temp audio file) was silently dropping the
-        # audio stream on Linux even though the temp audio file existed
-        # with valid content (confirmed via diagnostic logging) — a
-        # platform/ffmpeg-version difference in default stream selection
-        # heuristics, not a missing/corrupt audio file.
-        ffmpeg_params=["-map", "0:v:0", "-map", "1:a:0"],
     )
     video_clip.close()
     del video_clip
