@@ -26,8 +26,18 @@ deleted immediately after. Nothing is ever permanently publicly accessible.
 
 import base64
 import os
+import shutil
 import pickle
 import random
+
+# Force the system ffmpeg (installed via apt-get in the workflow) instead of
+# imageio_ffmpeg's bundled per-platform binary. Local Windows testing (which
+# had working audio, verified with ffprobe) used ffmpeg-win-x86_64-v7.1.exe;
+# the broken CI runs used ffmpeg-linux-x86_64-v7.0.2 — testing whether that
+# specific bundled Linux build has an audio-muxing regression.
+_system_ffmpeg = shutil.which("ffmpeg")
+if _system_ffmpeg:
+    os.environ["IMAGEIO_FFMPEG_EXE"] = _system_ffmpeg
 import sys
 import time
 
