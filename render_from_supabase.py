@@ -98,7 +98,10 @@ def render_video(story: dict) -> str | None:
         "video_count": 1,
         "video_clip_duration": 3,
         "subtitle_enabled": True,  # burned-in — Instagram has no auto-caption equivalent for API-published Reels
-        "font_name": "Arial",  # was silently defaulting to a Chinese font (STHeitiMedium.ttc)
+        # Must be an actual filename in resource/fonts/ — "Arial" (no such file)
+        # crashed the render thread silently (AIVidGen doesn't mark it failed on
+        # an uncaught exception, it just hangs at whatever progress it had).
+        "font_name": "BeVietnamPro-Medium.ttf",
         "text_fore_color": "#FFFFFF",
         "stroke_color": "#000000",
         "stroke_width": 2,
