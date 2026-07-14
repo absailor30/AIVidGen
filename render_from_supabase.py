@@ -82,7 +82,7 @@ def render_video(story: dict) -> str | None:
     payload = {
         "video_subject": story["title"],
         "video_script": story["story"],
-        "video_terms": random.choice(SATISFYING_KEYWORDS),
+        "video_terms": random.sample(SATISFYING_KEYWORDS, k=min(4, len(SATISFYING_KEYWORDS))),
         "video_aspect": "9:16",
         "video_language": "en",
         "voice_name": STORY_VOICE,
@@ -90,6 +90,7 @@ def render_video(story: dict) -> str | None:
         "video_source": "pexels",
         "pexels_api_key": os.environ["PEXELS_API_KEY"],
         "video_count": 1,
+        "video_clip_duration": 3,
         "subtitle_enabled": True,  # burned-in — Instagram has no auto-caption equivalent for API-published Reels
     }
     params = TaskVideoRequest(**payload)
@@ -129,11 +130,12 @@ def upload_to_youtube(video_path: str, kit: dict) -> str | None:
             "title": kit["youtube_title"][:100],
             "description": kit["youtube_description"][:5000],
             "tags": kit["youtube_tags"],
-            "categoryId": "22",
+            "categoryId": os.environ.get("YOUTUBE_CATEGORY_ID", "24"),  # 24 = Entertainment
         },
         "status": {
-            "privacyStatus": os.environ.get("YOUTUBE_PRIVACY", "private"),
+            "privacyStatus": os.environ.get("YOUTUBE_PRIVACY", "public"),
             "selfDeclaredMadeForKids": False,
+            "containsSyntheticMedia": True,
         },
     }
     media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
@@ -141,7 +143,24 @@ def upload_to_youtube(video_path: str, kit: dict) -> str | None:
     response = None
     while response is None:
         _, response = request.next_chunk()
-    return response.get("id")
+    video_id = response.get("id")
+
+    playlist_id = os.environ.get("YOUTUBE_PLAYLIST_ID")
+    if playlist_id and video_id:
+        try:
+            youtube.playlistItems().insert(
+                part="snippet",
+                body={
+                    "snippet": {
+                        "playlistId": playlist_id,
+                        "resourceId": {"kind": "youtube#video", "videoId": video_id},
+                    }
+                },
+            ).execute()
+        except Exception as e:
+            print(f"[render] Failed to add to playlist (video still uploaded): {e}")
+
+    return video_id
 
 
 STORAGE_BUCKET = "rendered-videos"
