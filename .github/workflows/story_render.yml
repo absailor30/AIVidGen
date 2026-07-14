@@ -36,4 +36,6 @@ jobs:
           YOUTUBE_PRIVACY: "private"
           YOUTUBE_CATEGORY_ID: "24"
           YOUTUBE_PLAYLIST_ID: ${{ secrets.YOUTUBE_PLAYLIST_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
         run: python render_from_supabase.py
