@@ -56,6 +56,18 @@ def _patched_init(self, filename, size, fps, audiofile=None, **kwargs):
 
 _ffmpeg_writer.FFMPEG_VideoWriter.__init__ = _patched_init
 
+# Also log the exact subprocess command ffmpeg_writer builds and hands to
+# Popen — confirms whether our -map ffmpeg_params actually reached the
+# real command line, rather than just inferring it from audiofile presence.
+_original_popen = _ffmpeg_writer.sp.Popen
+
+def _patched_popen(cmd, *args, **kwargs):
+    if isinstance(cmd, list) and any("ffmpeg" in str(c).lower() for c in cmd[:1]):
+        print(f"[audio-debug] ffmpeg cmd: {cmd}")
+    return _original_popen(cmd, *args, **kwargs)
+
+_ffmpeg_writer.sp.Popen = _patched_popen
+
 from app.config import config
 from app.models.schema import TaskVideoRequest
 from app.services import state as sm
