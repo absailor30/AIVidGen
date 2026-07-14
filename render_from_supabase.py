@@ -44,6 +44,26 @@ import time
 import requests
 from supabase import create_client
 
+# Diagnostic patch: FFMPEG_VideoWriter only includes audio in the ffmpeg
+# command if `audiofile is not None` (a path to a pre-encoded temp audio
+# file written just before this). ffmpeg itself runs with -loglevel error,
+# which would silently hide a warning about a missing/empty/corrupt audio
+# input. Logging the actual path + whether it exists + its size right here
+# tells us definitively whether the temp audio file write step is the bug.
+import moviepy.video.io.ffmpeg_writer as _ffmpeg_writer
+_original_init = _ffmpeg_writer.FFMPEG_VideoWriter.__init__
+
+def _patched_init(self, filename, size, fps, audiofile=None, **kwargs):
+    if audiofile is not None:
+        exists = os.path.exists(audiofile)
+        size_bytes = os.path.getsize(audiofile) if exists else None
+        print(f"[audio-debug] FFMPEG_VideoWriter audiofile={audiofile!r} exists={exists} size_bytes={size_bytes}")
+    else:
+        print("[audio-debug] FFMPEG_VideoWriter audiofile=None (no audio will be muxed)")
+    _original_init(self, filename, size, fps, audiofile=audiofile, **kwargs)
+
+_ffmpeg_writer.FFMPEG_VideoWriter.__init__ = _patched_init
+
 from app.config import config
 from app.models.schema import TaskVideoRequest
 from app.services import state as sm
