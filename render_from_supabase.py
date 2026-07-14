@@ -109,7 +109,16 @@ def render_video(story: dict) -> str | None:
     params = TaskVideoRequest(**payload)
     task_id = utils.get_uuid()
     sm.state.update_task(task_id)
-    task.start(task_id, params, stop_at="video")
+
+    # Run inside a thread, matching exactly how the real REST server executes
+    # this (TaskManager.execute_task/run_task) rather than calling it directly
+    # on the main thread — testing whether that's what's dropping audio on
+    # the Linux CI runner (confirmed via ffprobe: local run via the actual
+    # server has audio, this script's direct main-thread call does not).
+    import threading
+    render_thread = threading.Thread(target=task.start, args=(task_id, params), kwargs={"stop_at": "video"})
+    render_thread.start()
+    render_thread.join()
 
     result = sm.state.get_task(task_id)
     if result.get("state") != 1:  # TASK_STATE_COMPLETE
