@@ -187,7 +187,7 @@ def upload_to_youtube(video_path: str, kit: dict) -> str | None:
             "categoryId": os.environ.get("YOUTUBE_CATEGORY_ID", "24"),  # 24 = Entertainment
         },
         "status": {
-            "privacyStatus": os.environ.get("YOUTUBE_PRIVACY", "public"),
+            "privacyStatus": os.environ.get("YOUTUBE_PRIVACY", "private"),
             "selfDeclaredMadeForKids": False,
             "containsSyntheticMedia": True,
         },
