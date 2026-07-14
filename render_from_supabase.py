@@ -92,6 +92,10 @@ def render_video(story: dict) -> str | None:
         "video_count": 1,
         "video_clip_duration": 3,
         "subtitle_enabled": True,  # burned-in — Instagram has no auto-caption equivalent for API-published Reels
+        "font_name": "Arial",  # was silently defaulting to a Chinese font (STHeitiMedium.ttc)
+        "text_fore_color": "#FFFFFF",
+        "stroke_color": "#000000",
+        "stroke_width": 2,
     }
     params = TaskVideoRequest(**payload)
     task_id = utils.get_uuid()
