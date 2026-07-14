@@ -107,6 +107,7 @@ def render_video(story: dict) -> str | None:
         "pexels_api_key": os.environ["PEXELS_API_KEY"],
         "video_count": 1,
         "video_clip_duration": 3,
+        "bgm_type": "",  # disabled temporarily to eliminate it as a variable in the audio-bug debugging
         "subtitle_enabled": True,  # burned-in — Instagram has no auto-caption equivalent for API-published Reels
         # Must be an actual filename in resource/fonts/ — "Arial" (no such file)
         # crashed the render thread silently (AIVidGen doesn't mark it failed on
