@@ -57,7 +57,7 @@ SATISFYING_KEYWORDS = [
 ]
 
 STORY_VOICE = "en-US-JennyNeural"
-VOICE_SPEED = 1.3
+VOICE_SPEED = 1.4  # also trims render duration/file size
 
 
 def supabase_client():
