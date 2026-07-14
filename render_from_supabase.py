@@ -6,6 +6,9 @@ AIVidGen's task pipeline *in-process* (no persistent uvicorn server needed —
 fits an ephemeral Actions runner), uploads to YouTube, and records the result
 back to Supabase `story_state` for cooldown tracking (STORY_ENGINE_BIBLE §12.4).
 
+YouTube only for now — Instagram publishing was removed to reduce variables
+while debugging a render-stage audio bug on the Linux CI runner.
+
 Required environment variables:
   SUPABASE_URL, SUPABASE_SERVICE_KEY   — from the Supabase dashboard
   PEXELS_API_KEY                       — https://www.pexels.com/api/
@@ -13,15 +16,6 @@ Required environment variables:
   GOOGLE_TOKEN_PICKLE_B64              — base64 of a locally-generated token.pickle
                                           (run youtube_uploader.py once locally first)
   YOUTUBE_PRIVACY                      — optional, default "private"
-  IG_ACCESS_TOKEN                      — token from Meta's "API setup with Instagram login" flow
-                                          (no linked Facebook Page needed)
-  IG_USER_ID                           — Instagram account's numeric user ID (from graph.instagram.com/me)
-
-Instagram publishing: the rendered video is uploaded to the private Supabase
-Storage bucket "rendered-videos", a short-lived signed URL is generated (the
-only way Instagram's Graph API can fetch it — it doesn't accept raw bytes),
-Instagram is told to fetch + publish from that URL, and the storage object is
-deleted immediately after. Nothing is ever permanently publicly accessible.
 """
 
 import base64
@@ -39,9 +33,7 @@ _system_ffmpeg = shutil.which("ffmpeg")
 if _system_ffmpeg:
     os.environ["IMAGEIO_FFMPEG_EXE"] = _system_ffmpeg
 import sys
-import time
 
-import requests
 from supabase import create_client
 
 # Diagnostic patch: FFMPEG_VideoWriter only includes audio in the ffmpeg
@@ -238,96 +230,6 @@ def upload_to_youtube(video_path: str, kit: dict) -> str | None:
     return video_id
 
 
-STORAGE_BUCKET = "rendered-videos"
-GRAPH_API_BASE = "https://graph.instagram.com"  # Instagram API with Instagram Login (no linked FB Page needed)
-
-
-def remux_faststart(video_path: str) -> str:
-    """
-    Moves the MP4 moov atom to the front of the file. Standard ffmpeg/moviepy
-    output puts it at the end, which is fine for YouTube but causes Instagram's
-    ingestion to sometimes drop the audio track since it starts processing
-    before the full file (and its audio index) has downloaded. Fast, lossless
-    stream-copy — no re-encoding.
-    """
-    import subprocess
-
-    out_path = video_path.replace(".mp4", "_faststart.mp4")
-    subprocess.run(
-        ["ffmpeg", "-y", "-i", video_path, "-c", "copy", "-movflags", "+faststart", out_path],
-        check=True, capture_output=True,
-    )
-    return out_path
-
-
-def get_signed_video_url(sb, video_path: str, story_id) -> tuple[str, str]:
-    """Remuxes for faststart, uploads to the private bucket, returns (storage_path, signed_url)."""
-    faststart_path = remux_faststart(video_path)
-    storage_path = f"{story_id}.mp4"
-    with open(faststart_path, "rb") as f:
-        sb.storage.from_(STORAGE_BUCKET).upload(
-            storage_path, f.read(), file_options={"content-type": "video/mp4"}
-        )
-    signed = sb.storage.from_(STORAGE_BUCKET).create_signed_url(storage_path, 3600)
-    return storage_path, signed["signedURL"]
-
-
-def delete_from_storage(sb, storage_path: str):
-    try:
-        sb.storage.from_(STORAGE_BUCKET).remove([storage_path])
-    except Exception as e:
-        print(f"[instagram] Cleanup warning (non-fatal): {e}")
-
-
-def upload_to_instagram(video_url: str, kit: dict) -> str | None:
-    """Publishes a Reel via the Instagram API (Instagram Login) using a temporary signed URL."""
-    token = os.environ["IG_ACCESS_TOKEN"]
-    ig_user_id = os.environ["IG_USER_ID"]
-
-    caption = f"{kit['instagram_caption']}\n\n" + " ".join(
-        f"#{h.lstrip('#')}" for h in kit["instagram_hashtags"]
-    )
-
-    create_resp = requests.post(
-        f"{GRAPH_API_BASE}/{ig_user_id}/media",
-        data={
-            "media_type": "REELS",
-            "video_url": video_url,
-            "caption": caption[:2200],
-            "access_token": token,
-        },
-        timeout=60,
-    )
-    create_resp.raise_for_status()
-    creation_id = create_resp.json()["id"]
-
-    # Poll until Instagram finishes downloading/processing the video
-    deadline = time.time() + 300
-    while time.time() < deadline:
-        status_resp = requests.get(
-            f"{GRAPH_API_BASE}/{creation_id}",
-            params={"fields": "status_code", "access_token": token},
-            timeout=30,
-        )
-        status_resp.raise_for_status()
-        status = status_resp.json().get("status_code")
-        if status == "FINISHED":
-            break
-        if status == "ERROR":
-            raise RuntimeError("Instagram container processing failed")
-        time.sleep(10)
-    else:
-        raise TimeoutError("Instagram container never finished processing")
-
-    publish_resp = requests.post(
-        f"{GRAPH_API_BASE}/{ig_user_id}/media_publish",
-        data={"creation_id": creation_id, "access_token": token},
-        timeout=60,
-    )
-    publish_resp.raise_for_status()
-    return publish_resp.json().get("id")
-
-
 def main():
     theme = sys.argv[1] if len(sys.argv) > 1 else None
     sb = supabase_client()
@@ -353,24 +255,6 @@ def main():
     except Exception as e:
         print(f"[main] YouTube upload failed (video still rendered locally): {e}")
 
-    instagram_id = None
-    if os.environ.get("PAUSE_INSTAGRAM", "false").lower() == "true":
-        print("[main] Skipping Instagram — PAUSE_INSTAGRAM is set (Instagram has no private/draft "
-              "option, so posting is paused while the audio bug is being debugged).")
-    elif os.environ.get("IG_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
-        storage_path = None
-        try:
-            storage_path, signed_url = get_signed_video_url(sb, video_path, row["id"])
-            instagram_id = upload_to_instagram(signed_url, story["publishing_kit"])
-            print(f"[main] Posted to Instagram: media id {instagram_id}")
-        except Exception as e:
-            print(f"[main] Instagram publish failed (video still rendered locally): {e}")
-        finally:
-            if storage_path:
-                delete_from_storage(sb, storage_path)
-    else:
-        print("[main] Skipping Instagram — IG_ACCESS_TOKEN / IG_USER_ID not set.")
-
     dna = story["dna"]
     sb.table("story_state").insert({
         "theme": story["theme"],
@@ -385,10 +269,9 @@ def main():
         "score": story["score"],
         "tracking_tag": story["tracking_tag"],
         "youtube_id": youtube_id,
-        "instagram_id": instagram_id,
     }).execute()
     sb.table("story_queue").update({
-        "rendered": True, "youtube_id": youtube_id, "instagram_id": instagram_id,
+        "rendered": True, "youtube_id": youtube_id,
     }).eq("id", row["id"]).execute()
     print("[main] Done.")
 
