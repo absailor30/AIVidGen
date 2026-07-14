@@ -7,7 +7,10 @@ fits an ephemeral Actions runner), uploads to YouTube, and records the result
 back to Supabase `story_state` for cooldown tracking (STORY_ENGINE_BIBLE §12.4).
 
 YouTube only for now — Instagram publishing was removed to reduce variables
-while debugging a render-stage audio bug on the Linux CI runner.
+while debugging what turned out to be a one-line bug in this file (see
+render_video() — result.get("combined_videos") was being picked ahead of
+result.get("videos"), grabbing AIVidGen's intermediate silent-by-design file
+instead of the actual final output with audio/subtitles attached).
 
 Required environment variables:
   SUPABASE_URL, SUPABASE_SERVICE_KEY   — from the Supabase dashboard
@@ -20,53 +23,11 @@ Required environment variables:
 
 import base64
 import os
-import shutil
 import pickle
 import random
-
-# Force the system ffmpeg (installed via apt-get in the workflow) instead of
-# imageio_ffmpeg's bundled per-platform binary. Local Windows testing (which
-# had working audio, verified with ffprobe) used ffmpeg-win-x86_64-v7.1.exe;
-# the broken CI runs used ffmpeg-linux-x86_64-v7.0.2 — testing whether that
-# specific bundled Linux build has an audio-muxing regression.
-_system_ffmpeg = shutil.which("ffmpeg")
-if _system_ffmpeg:
-    os.environ["IMAGEIO_FFMPEG_EXE"] = _system_ffmpeg
 import sys
 
 from supabase import create_client
-
-# Diagnostic patch: FFMPEG_VideoWriter only includes audio in the ffmpeg
-# command if `audiofile is not None` (a path to a pre-encoded temp audio
-# file written just before this). ffmpeg itself runs with -loglevel error,
-# which would silently hide a warning about a missing/empty/corrupt audio
-# input. Logging the actual path + whether it exists + its size right here
-# tells us definitively whether the temp audio file write step is the bug.
-import moviepy.video.io.ffmpeg_writer as _ffmpeg_writer
-_original_init = _ffmpeg_writer.FFMPEG_VideoWriter.__init__
-
-def _patched_init(self, filename, size, fps, audiofile=None, **kwargs):
-    if audiofile is not None:
-        exists = os.path.exists(audiofile)
-        size_bytes = os.path.getsize(audiofile) if exists else None
-        print(f"[audio-debug] FFMPEG_VideoWriter audiofile={audiofile!r} exists={exists} size_bytes={size_bytes}")
-    else:
-        print("[audio-debug] FFMPEG_VideoWriter audiofile=None (no audio will be muxed)")
-    _original_init(self, filename, size, fps, audiofile=audiofile, **kwargs)
-
-_ffmpeg_writer.FFMPEG_VideoWriter.__init__ = _patched_init
-
-# Also log the exact subprocess command ffmpeg_writer builds and hands to
-# Popen — confirms whether our -map ffmpeg_params actually reached the
-# real command line, rather than just inferring it from audiofile presence.
-_original_popen = _ffmpeg_writer.sp.Popen
-
-def _patched_popen(cmd, *args, **kwargs):
-    if isinstance(cmd, list) and any("ffmpeg" in str(c).lower() for c in cmd[:1]):
-        print(f"[audio-debug] ffmpeg cmd: {cmd}")
-    return _original_popen(cmd, *args, **kwargs)
-
-_ffmpeg_writer.sp.Popen = _patched_popen
 
 from app.config import config
 from app.models.schema import TaskVideoRequest
@@ -131,7 +92,6 @@ def render_video(story: dict) -> str | None:
         "pexels_api_key": os.environ["PEXELS_API_KEY"],
         "video_count": 1,
         "video_clip_duration": 3,
-        "bgm_type": "",  # disabled temporarily to eliminate it as a variable in the audio-bug debugging
         "subtitle_enabled": True,  # burned-in — Instagram has no auto-caption equivalent for API-published Reels
         # Must be an actual filename in resource/fonts/ — "Arial" (no such file)
         # crashed the render thread silently (AIVidGen doesn't mark it failed on
@@ -144,49 +104,22 @@ def render_video(story: dict) -> str | None:
     params = TaskVideoRequest(**payload)
     task_id = utils.get_uuid()
     sm.state.update_task(task_id)
-
-    # Run inside a thread, matching exactly how the real REST server executes
-    # this (TaskManager.execute_task/run_task) rather than calling it directly
-    # on the main thread — testing whether that's what's dropping audio on
-    # the Linux CI runner (confirmed via ffprobe: local run via the actual
-    # server has audio, this script's direct main-thread call does not).
-    import threading
-    render_thread = threading.Thread(target=task.start, args=(task_id, params), kwargs={"stop_at": "video"})
-    render_thread.start()
-    render_thread.join()
+    task.start(task_id, params, stop_at="video")
 
     result = sm.state.get_task(task_id)
     if result.get("state") != 1:  # TASK_STATE_COMPLETE
         print(f"[render] Task did not complete successfully: state={result.get('state')}")
         return None
 
-    videos = result.get("combined_videos") or result.get("videos") or []
+    # "videos" (final_video_paths) is the actual final output — subtitles
+    # burned in, audio attached, via generate_video(). "combined_videos" is
+    # an intermediate, silent-by-design file (just concatenated stock clips,
+    # before generate_video() ever runs) — must not be picked first.
+    videos = result.get("videos") or result.get("combined_videos") or []
     if not videos:
         print("[render] No output video path found.")
         return None
-
-    _log_stream_diagnostics(videos[0])
     return videos[0]
-
-
-def _log_stream_diagnostics(video_path: str):
-    """Prints whether the rendered file actually has an audio stream, so we
-    can tell a render bug from a delivery bug directly in the CI log instead
-    of inferring it from what YouTube/Instagram show afterward."""
-    import subprocess
-    import imageio_ffmpeg
-
-    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
-    result = subprocess.run(
-        [ffmpeg_exe, "-i", video_path], capture_output=True, text=True
-    )
-    stream_lines = [line.strip() for line in result.stderr.splitlines() if "Stream #" in line]
-    has_audio = any("Audio:" in line for line in stream_lines)
-    print(f"[render] ffmpeg used: {ffmpeg_exe}")
-    print(f"[render] Streams in rendered file:")
-    for line in stream_lines:
-        print(f"[render]   {line}")
-    print(f"[render] Has audio stream: {has_audio}")
 
 
 def _youtube_credentials():

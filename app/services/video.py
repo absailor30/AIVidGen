@@ -1116,11 +1116,6 @@ def generate_video(
             logger.error(f"failed to add bgm: {str(e)}")
 
     video_clip = video_clip.with_audio(audio_clip)
-    logger.info(
-        f"[audio-debug] audio_clip.duration={getattr(audio_clip, 'duration', None)} "
-        f"video_clip.duration={getattr(video_clip, 'duration', None)} "
-        f"video_clip.audio is None={video_clip.audio is None}"
-    )
     # 显式沿用输入音频的采样率；如果取不到，再回退到 MoviePy 默认的 44100Hz。
     # 这样可以减少不同运行环境，尤其是 Docker 环境中再次重采样带来的音质波动。
     output_audio_fps = int(getattr(audio_clip, "fps", 0) or 44100)
