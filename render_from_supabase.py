@@ -102,9 +102,12 @@ def render_video(story: dict) -> str | None:
         # crashed the render thread silently (AIVidGen doesn't mark it failed on
         # an uncaught exception, it just hangs at whatever progress it had).
         "font_name": "BeVietnamPro-Medium.ttf",
-        "text_fore_color": "#FFFFFF",
-        "stroke_color": "#000000",
-        "stroke_width": 2,
+        "text_fore_color": "#000000",       # black text
+        "text_background_color": "#FFFF00",  # yellow highlight behind each caption
+        "stroke_width": 0,                   # redundant with the highlight box
+        "font_size": 50,                     # smaller so most cues wrap to ~2 lines (no hard cap available)
+        "subtitle_position": "custom",
+        "custom_position": 66.0,  # ~top of the bottom third — default "bottom" (95%) gets covered by platform UI
     }
     params = TaskVideoRequest(**payload)
     task_id = utils.get_uuid()
