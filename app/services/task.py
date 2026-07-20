@@ -193,16 +193,18 @@ def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
     subtitle_provider = config.app.get("subtitle_provider", "edge").strip().lower()
     logger.info(f"\n\n## generating subtitle, provider: {subtitle_provider}")
 
-    subtitle_fallback = False
     if subtitle_provider == "edge":
         voice.create_subtitle(
             text=video_script, sub_maker=sub_maker, subtitle_file=subtitle_path
         )
         if not os.path.exists(subtitle_path):
-            subtitle_fallback = True
-            logger.warning("subtitle file not found, fallback to whisper")
-
-    if subtitle_provider == "whisper" or subtitle_fallback:
+            # Whisper fallback removed: its script-correction step introduced
+            # multi-second timing drift on a subset of videos (confirmed by
+            # a script/subtitle text-mismatch warning in the logs). Better
+            # to skip subtitles on this video than burn in wrong timing.
+            logger.warning("edge subtitle generation failed, skipping subtitles for this video")
+            return ""
+    elif subtitle_provider == "whisper":
         subtitle.create(audio_file=audio_file, subtitle_file=subtitle_path)
         logger.info("\n\n## correcting subtitle")
         subtitle.correct(subtitle_file=subtitle_path, video_script=video_script)
