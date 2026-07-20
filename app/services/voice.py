@@ -1492,6 +1492,26 @@ def _build_subtitle_items_from_legacy_submaker(
     return sub_items
 
 
+def _cap_line_word_count(script_lines: list[str], max_words: int = 8) -> list[str]:
+    """
+    Punctuation-based splitting can still leave a clause long enough to wrap
+    to 3-4 lines on screen at our font size/width. Further split any line
+    over max_words into smaller word-count-bounded chunks so each rendered
+    subtitle cue stays within ~2 lines. The cue-matching logic downstream
+    just accumulates edge-tts word timings until it matches whatever line
+    it's given, so shorter target lines naturally get correctly-timed cues.
+    """
+    capped = []
+    for line in script_lines:
+        words = line.split()
+        if len(words) <= max_words:
+            capped.append(line)
+            continue
+        for i in range(0, len(words), max_words):
+            capped.append(" ".join(words[i:i + max_words]))
+    return capped
+
+
 def create_subtitle(sub_maker: SubMaker, text: str, subtitle_file: str):
     """
     优化字幕文件
@@ -1500,7 +1520,7 @@ def create_subtitle(sub_maker: SubMaker, text: str, subtitle_file: str):
     3. 生成新的字幕文件
     """
     text = _format_text(text)
-    script_lines = utils.split_string_by_punctuations(text)
+    script_lines = _cap_line_word_count(utils.split_string_by_punctuations(text))
     try:
         if hasattr(sub_maker, "cues") and sub_maker.cues:
             sub_items = _build_subtitle_items_from_edge_cues(sub_maker, script_lines)
