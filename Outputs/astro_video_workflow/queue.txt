@@ -1,0 +1,14 @@
+# Video Queue File
+# Format: subject|lang|voice (voice is optional)
+# lang options: hi = Hindi, en = English
+# Leave a line blank or start with # to skip it
+# After a video is generated, DO NOT delete lines — the script tracks completed ones
+
+Mars transit 2026 Aries Taurus Gemini rashifal|hi
+Saturn retrograde 2026 ke upay aur prabhav|hi
+Jupiter Gemini mein dhan yog 2026|hi
+Rahu Ketu gochar 2026 sabse prabhavit rashi|hi
+Shani sade sati 2026 kaun kaun prabhavit hain|hi
+2026 planetary alignment predictions for India|en
+Saturn retrograde remedies and effects 2026|en
+Jupiter in Gemini wealth predictions 2026|en
