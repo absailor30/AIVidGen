@@ -299,7 +299,15 @@ def main():
         youtube_id = upload_to_youtube(video_path, story["publishing_kit"])
         print(f"[main] Uploaded: https://youtube.com/watch?v={youtube_id}")
     except Exception as e:
-        print(f"[main] YouTube upload failed (video still rendered locally): {e}")
+        print(f"[main] YouTube upload failed: {e}")
+        # YouTube is the primary destination — release the claim so the next
+        # run retries this story instead of silently marking it "rendered"
+        # with no video ever having gone live, and fail the job so the
+        # Telegram failure alert actually fires instead of a false-green run.
+        sb.table("story_queue").update(
+            {"error": f"youtube upload failed: {e}", "claimed_at": None}
+        ).eq("id", row["id"]).execute()
+        sys.exit(1)
 
     instagram_id = None
     if os.environ.get("IG_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
