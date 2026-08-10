@@ -13,15 +13,25 @@ Required environment variables:
 import json
 import os
 import re
+import time
 from collections import Counter
 
 import requests
 from supabase import create_client
 
-BIBLE_PATH = os.path.join(os.path.dirname(__file__), "Outputs", "STORY_ENGINE_BIBLE_v4.1.md")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "llama-3.3-70b-versatile"
 QUEUE_TARGET = 4
+
+# Compact system prompt. We deliberately do NOT send the full 28KB story bible
+# on every call — Groq's free tier is 12,000 tokens/MINUTE, and the bible alone
+# is ~7K tokens, so sending it each attempt instantly trips the rate limit. The
+# AUTOMATION_TAIL below is fully self-contained, so this short brief is enough.
+CHANNEL_BRIEF = """You are the head writer for "Twisty! StoryVault", a faceless
+first-person storytelling channel for YouTube Shorts and Instagram Reels. Brand
+promise: "Every story has another side." Your stories are emotional, grounded,
+realistic family/relationship dramas that hook instantly and end with a
+satisfying, karmic vindication where the narrator comes out on top."""
 
 THEMES = [
     "Family Inheritance",
@@ -63,7 +73,9 @@ flowing as one continuous paragraph (do not label the beats):
 HARD RULES:
 - The story MUST be COMPLETE and fully resolved in this single piece. NO cliffhangers,
   NO "Part 1", "Part 2", "to be continued", or any promise of a continuation.
-- 350-420 words (this runs ~90-120 seconds narrated — do not go under 340 or over 440).
+- Length: aim for 300-340 words (this runs ~90-120 seconds narrated). NEVER write
+  fewer than 270 words — expand each of the four beats with concrete, specific,
+  sensory detail rather than rushing to the ending.
 - First person, one paragraph, no quotation marks around dialogue.
 - End with a short spoken follow-CTA woven naturally into the closing line
   (e.g. "Follow for the next one.").
@@ -109,8 +121,8 @@ def validate_story(story: dict):
         raise ValueError(f"score {story['score']} below 85")
     # Enforce the ~90-120s narration length (350-420 target, allow a little slack).
     word_count = len(story["story"].split())
-    if not (305 <= word_count <= 450):
-        raise ValueError(f"story word count {word_count} outside 305-450 range")
+    if not (260 <= word_count <= 360):
+        raise ValueError(f"story word count {word_count} outside 260-360 range")
     lowered = story["story"].lower()
     for banned in ("part 1", "part 2", "part one", "part two", "to be continued"):
         if banned in lowered:
@@ -118,23 +130,48 @@ def validate_story(story: dict):
 
 
 def call_groq(system: str, user: str) -> dict:
-    resp = requests.post(
-        GROQ_URL,
-        headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}", "Content-Type": "application/json"},
-        json={
-            "model": GROQ_MODEL,
-            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            "temperature": 0.9,
-            "max_tokens": 3000,
-        },
-        timeout=60,
-    )
-    resp.raise_for_status()
+    # Retry on 429 (rate limit), honoring the reset window the API reports.
+    for attempt in range(4):
+        resp = requests.post(
+            GROQ_URL,
+            headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}", "Content-Type": "application/json"},
+            json={
+                "model": GROQ_MODEL,
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                "temperature": 0.9,
+                "max_tokens": 1500,
+            },
+            timeout=60,
+        )
+        if resp.status_code == 429 and attempt < 3:
+            wait = _parse_retry_seconds(resp)
+            print(f"[generate] Rate limited, waiting {wait:.0f}s before retry...")
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()
+        break
+
     text = resp.json()["choices"][0]["message"]["content"]
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise ValueError(f"No JSON found in response: {text[:300]}")
     return json.loads(match.group(0))
+
+
+def _parse_retry_seconds(resp) -> float:
+    """Seconds to wait after a 429, from Retry-After or the token-reset header (capped)."""
+    retry_after = resp.headers.get("retry-after")
+    if retry_after:
+        try:
+            return min(float(retry_after), 30.0)
+        except ValueError:
+            pass
+    reset = resp.headers.get("x-ratelimit-reset-tokens", "")  # e.g. "17.78s" or "1m2s"
+    m = re.match(r"(?:(\d+)m)?([\d.]+)s", reset)
+    if m:
+        secs = int(m.group(1) or 0) * 60 + float(m.group(2))
+        return min(secs + 1.0, 30.0)
+    return 15.0
 
 
 def pick_theme(state_rows: list) -> str:
@@ -154,15 +191,13 @@ def main():
         print("[generate] Queue healthy, nothing to do.")
         return
 
-    with open(BIBLE_PATH, encoding="utf-8") as f:
-        bible = f.read()
-    system_prompt = bible + AUTOMATION_TAIL
+    system_prompt = CHANNEL_BRIEF + AUTOMATION_TAIL
 
     state_rows = sb.table("story_state").select("theme,hook,fingerprint,curve").execute().data
 
     written = 0
     attempts = 0
-    while unclaimed + written < QUEUE_TARGET and attempts < (QUEUE_TARGET - unclaimed) * 3:
+    while unclaimed + written < QUEUE_TARGET and attempts < (QUEUE_TARGET - unclaimed) * 6:
         attempts += 1
         theme = pick_theme(state_rows)
         recent = [r for r in state_rows if r.get("theme") == theme][-25:]

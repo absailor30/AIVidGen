@@ -60,7 +60,10 @@ SATISFYING_KEYWORDS = [
 ]
 
 STORY_VOICE = "en-US-JennyNeural"
-VOICE_SPEED = 1.4  # also trims render duration/file size
+# Normal pace suits the longer 90-120s vindication stories (calibrated: JennyNeural
+# is ~2.85 words/sec at 1.0x, so ~300-word stories land ~100-110s). 1.4x was for the
+# old ~50s snappy format.
+VOICE_SPEED = 1.0
 
 
 def supabase_client():
