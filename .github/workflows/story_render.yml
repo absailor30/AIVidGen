@@ -1,12 +1,9 @@
 name: Twisty! StoryVault — render & upload
 
 on:
-  schedule:
-    # Times below are UTC; posting schedule is 8:30am / 12:30pm / 4:45pm / 8:30pm IST (UTC+5:30)
-    - cron: "0 3 * * *"    # 08:30 IST
-    - cron: "0 7 * * *"    # 12:30 IST
-    - cron: "15 11 * * *"  # 16:45 IST
-    - cron: "0 15 * * *"   # 20:30 IST
+  # Scheduling is driven by Cloudflare Cron Triggers (see cloudflare_worker.js),
+  # which fire on time — GitHub's own cron lagged 1-3hrs on free tier. The
+  # Worker calls this workflow via workflow_dispatch at each slot.
   workflow_dispatch: {}
 
 jobs:

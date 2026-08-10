@@ -12,6 +12,7 @@
 const REPO = "absailor30/AIVidGen";
 
 export default {
+  // Telegram webhook (instant /render, /status commands).
   async fetch(request, env) {
     if (request.method !== "POST") return new Response("ok");
 
@@ -34,6 +35,15 @@ export default {
       await reportStatus(env);
     }
     return new Response("ok");
+  },
+
+  // Cloudflare Cron Triggers — reliable on-time scheduling (GitHub's own cron
+  // lags 1-3hrs on free tier). Configure these 4 cron expressions in the
+  // Cloudflare dashboard (Worker > Settings > Triggers > Cron Triggers):
+  //   0 3 * * *    (08:30 IST)   0 7 * * *   (12:30 IST)
+  //   15 11 * * *  (16:45 IST)   0 15 * * *  (20:30 IST)
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(triggerRender(env));
   },
 };
 
