@@ -27,8 +27,10 @@ THEMES = [
     "Family Inheritance",
     "Career Sabotage / Workplace Betrayal",
     "Marriage & Infidelity",
-    "Landlord / Tenant Dispute",
-    "Business Partnership Betrayal",
+    "Wedding & Family Entitlement",
+    "Sibling Rivalry & Favoritism",
+    "In-Law Conflicts",
+    "Friendship Betrayal & Glow-Up",
 ]
 
 REQUIRED_KEYS = ["theme", "title", "story", "keywords", "dna", "curve",
@@ -41,15 +43,41 @@ AUTOMATION_TAIL = """
 
 ---
 
-ADDITIONAL AUTOMATION REQUIREMENT: respond with ONLY a single JSON object
-(no markdown fences, no commentary before or after), matching exactly:
+ADDITIONAL AUTOMATION REQUIREMENT — THIS OVERRIDES ANY CONFLICTING GUIDANCE ABOVE.
+
+NARRATIVE FORMAT (most important):
+Write a self-contained, first-person "satisfying vindication" story with FOUR beats,
+flowing as one continuous paragraph (do not label the beats):
+  1. HOOK — the very first sentence drops the reader straight into a shocking,
+     specific injustice that creates instant tension. E.g. "My sister announced at
+     my engagement party that my wedding gown was actually hers."
+  2. BUILD-UP — how it started and escalated; concrete details that make it real
+     and make the reader's blood boil.
+  3. TRIGGER (lowest point) — the injustice peaks: the people who should have my
+     back side with the wrongdoer, and I'm left stuck, humiliated, or cornered.
+  4. SATISFYING CLOSE — I come out on top through a believable turn (not luck alone),
+     and the wrongdoer is left jealous / exposed / regretful. Karmic, earned, and
+     fully resolved. E.g. a designer friend hears what happened and gets me a far
+     better gown; my sister can't hide her envy.
+
+HARD RULES:
+- The story MUST be COMPLETE and fully resolved in this single piece. NO cliffhangers,
+  NO "Part 1", "Part 2", "to be continued", or any promise of a continuation.
+- 350-420 words (this runs ~90-120 seconds narrated — do not go under 340 or over 440).
+- First person, one paragraph, no quotation marks around dialogue.
+- End with a short spoken follow-CTA woven naturally into the closing line
+  (e.g. "Follow for the next one.").
+- Keep it grounded and realistic — no over-the-top or implausible twists.
+
+Respond with ONLY a single JSON object (no markdown fences, no commentary before or
+after), matching exactly:
 
 {
   "theme": "...", "title": "...",
-  "story": "... 320-480 words, first person, one paragraph, no quotation marks, MUST end with a short spoken follow-CTA line woven naturally into the closing (e.g. 'Follow for the next one.') ...",
+  "story": "... the 350-420 word first-person story described above ...",
   "keywords": "... 15-25 word stock-footage search string, plain words, no commas ...",
-  "dna": {"hook": "...", "relationship": "...", "conflict": "...", "emotion": "...", "payoff": "...", "fingerprint": "..."},
-  "curve": "...",
+  "dna": {"hook": "...", "relationship": "...", "conflict": "...", "emotion": "...", "payoff": "... the satisfying/karmic resolution ...", "fingerprint": "..."},
+  "curve": "... describe the hook -> build-up -> trigger -> satisfying-close arc ...",
   "variables_changed": ["...", "..."],
   "score": 88,
   "cooldown_flag": "...",
@@ -79,6 +107,14 @@ def validate_story(story: dict):
         raise ValueError("variables_changed needs >= 6 items")
     if story["score"] < 85:
         raise ValueError(f"score {story['score']} below 85")
+    # Enforce the ~90-120s narration length (350-420 target, allow a little slack).
+    word_count = len(story["story"].split())
+    if not (305 <= word_count <= 450):
+        raise ValueError(f"story word count {word_count} outside 305-450 range")
+    lowered = story["story"].lower()
+    for banned in ("part 1", "part 2", "part one", "part two", "to be continued"):
+        if banned in lowered:
+            raise ValueError(f"story must be self-contained, found '{banned}'")
 
 
 def call_groq(system: str, user: str) -> dict:
