@@ -60,10 +60,11 @@ SATISFYING_KEYWORDS = [
 ]
 
 STORY_VOICE = "en-US-JennyNeural"
-# Normal pace suits the longer 90-120s vindication stories (calibrated: JennyNeural
-# is ~2.85 words/sec at 1.0x, so ~300-word stories land ~100-110s). 1.4x was for the
-# old ~50s snappy format.
-VOICE_SPEED = 1.0
+# Snappier delivery, by request. Calibration note: JennyNeural runs ~2.85
+# words/sec at 1.0x, so a ~300-word story lands ~100-110s there; at 1.4x the
+# same story runs ~75-80s, below the 90-120s the 4-beat format was written for.
+# Drop back to 1.0 if the endings start feeling rushed.
+VOICE_SPEED = 1.4
 
 
 def supabase_client():
