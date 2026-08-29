@@ -20,7 +20,20 @@ import requests
 from supabase import create_client
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "llama-3.3-70b-versatile"
+
+# Groq retires models on a rolling basis and answers a retired name with a bare
+# 404. That is indistinguishable from any other failure to the retry loop below,
+# so a retirement used to silently drain the queue. We now try a list of models
+# in order and remember the first that answers. Set GROQ_MODEL to pin one.
+GROQ_MODELS = [m for m in [
+    os.environ.get("GROQ_MODEL"),
+    "llama-3.1-8b-instant",
+    "openai/gpt-oss-120b",
+    "moonshotai/kimi-k2-instruct",
+    "llama-3.3-70b-versatile",
+] if m]
+_active_model = None
+
 QUEUE_TARGET = 4
 
 # Compact system prompt. We deliberately do NOT send the full 28KB story bible
@@ -129,27 +142,62 @@ def validate_story(story: dict):
             raise ValueError(f"story must be self-contained, found '{banned}'")
 
 
-def call_groq(system: str, user: str) -> dict:
-    # Retry on 429 (rate limit), honoring the reset window the API reports.
-    for attempt in range(4):
-        resp = requests.post(
-            GROQ_URL,
-            headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}", "Content-Type": "application/json"},
-            json={
-                "model": GROQ_MODEL,
-                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-                "temperature": 0.9,
-                "max_tokens": 1500,
-            },
-            timeout=60,
+def _is_model_gone(resp) -> bool:
+    """True when Groq rejected the request because the model name no longer exists."""
+    if resp.status_code == 404:
+        return True
+    if resp.status_code == 400:
+        return "model" in resp.text.lower() and (
+            "does not exist" in resp.text.lower()
+            or "decommission" in resp.text.lower()
+            or "not found" in resp.text.lower()
         )
-        if resp.status_code == 429 and attempt < 3:
-            wait = _parse_retry_seconds(resp)
-            print(f"[generate] Rate limited, waiting {wait:.0f}s before retry...")
-            time.sleep(wait)
+    return False
+
+
+def call_groq(system: str, user: str) -> dict:
+    global _active_model
+
+    # Prefer the model already known to work this run, then fall through the rest.
+    candidates = ([_active_model] if _active_model else []) + [
+        m for m in GROQ_MODELS if m != _active_model
+    ]
+    resp = None
+    for model in candidates:
+        # Retry on 429 (rate limit), honoring the reset window the API reports.
+        for attempt in range(4):
+            resp = requests.post(
+                GROQ_URL,
+                headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}", "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+                    "temperature": 0.9,
+                    "max_tokens": 1500,
+                },
+                timeout=60,
+            )
+            if resp.status_code == 429 and attempt < 3:
+                wait = _parse_retry_seconds(resp)
+                print(f"[generate] Rate limited, waiting {wait:.0f}s before retry...")
+                time.sleep(wait)
+                continue
+            break
+
+        if _is_model_gone(resp):
+            print(f"[generate] Model '{model}' unavailable ({resp.status_code}), trying next.")
             continue
+
         resp.raise_for_status()
+        if _active_model != model:
+            print(f"[generate] Using Groq model: {model}")
+            _active_model = model
         break
+    else:
+        raise RuntimeError(
+            f"No usable Groq model. Tried {GROQ_MODELS}; all returned model-not-found. "
+            f"Check https://console.groq.com/docs/models and set the GROQ_MODEL secret."
+        )
 
     text = resp.json()["choices"][0]["message"]["content"]
     match = re.search(r"\{.*\}", text, re.DOTALL)
@@ -221,6 +269,15 @@ def main():
             print(f"[generate] Attempt failed, retrying: {e}")
 
     print(f"[generate] Done. Wrote {written} stories. Queue now ~{unclaimed + written}.")
+
+    # An empty queue means the next render has nothing to post. Exit non-zero so
+    # the workflow's Telegram failure alert fires, instead of reporting a green
+    # run that quietly published nothing.
+    if unclaimed + written == 0:
+        raise SystemExit(
+            "[generate] FATAL: queue is empty and no stories could be generated — "
+            "nothing will be posted. See the errors above."
+        )
 
 
 if __name__ == "__main__":
