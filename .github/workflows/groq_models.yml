@@ -1,0 +1,83 @@
+name: What Groq models can we use?
+
+# Diagnostic helper. Lists the models this GROQ_API_KEY can see, then probes
+# the plausible story-writing ones with a real (tiny) request, since being
+# listed and being usable on a given tier are not the same thing.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: List and probe
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, requests
+
+          KEY = os.environ["GROQ_API_KEY"]
+          H = {"Authorization": f"Bearer {KEY}"}
+
+          resp = requests.get("https://api.groq.com/openai/v1/models", headers=H, timeout=30)
+          print(f"GET /models -> {resp.status_code}")
+          if not resp.ok:
+              print(resp.text[:2000])
+              raise SystemExit("Could not list models — check GROQ_API_KEY.")
+
+          models = sorted(m["id"] for m in resp.json().get("data", []))
+          print(f"\n=== {len(models)} models visible to this key ===")
+          for m in models:
+              print(" ", m)
+
+          # Skip models that cannot write prose (speech, safety, embeddings).
+          candidates = [m for m in models if not any(
+              s in m.lower() for s in ("whisper", "tts", "guard", "embed", "prompt-guard")
+          )]
+
+          print(f"\n=== probing {len(candidates)} chat models with a real request ===")
+          print(f"{'model':<45} {'status':<8} {'reasoning?':<11} sample")
+          print("-" * 100)
+
+          for m in candidates:
+              try:
+                  r = requests.post(
+                      "https://api.groq.com/openai/v1/chat/completions",
+                      headers=H,
+                      json={
+                          "model": m,
+                          "messages": [{"role": "user", "content": "Reply with the single word: ok"}],
+                          "max_tokens": 400,
+                      },
+                      timeout=60,
+                  )
+              except Exception as e:
+                  print(f"{m:<45} {'ERROR':<8} {'-':<11} {e}")
+                  continue
+
+              if not r.ok:
+                  detail = r.text[:60].replace("\n", " ")
+                  print(f"{m:<45} {r.status_code:<8} {'-':<11} {detail}")
+                  continue
+
+              choice = r.json()["choices"][0]
+              content = (choice["message"].get("content") or "").strip()
+              # A model that spends the budget on hidden reasoning returns an
+              # empty content field - exactly the failure that truncated our
+              # story JSON. Flag it so we do not pick one of those again.
+              reasoning = bool(choice["message"].get("reasoning")) or not content
+              print(f"{m:<45} {'OK':<8} {('YES' if reasoning else 'no'):<11} {content[:30]!r}")
+
+          print("\nPick a model marked 'no' under reasoning for story generation.")
+          PY
