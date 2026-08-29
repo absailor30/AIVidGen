@@ -25,14 +25,24 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 # 404. That is indistinguishable from any other failure to the retry loop below,
 # so a retirement used to silently drain the queue. We now try a list of models
 # in order and remember the first that answers. Set GROQ_MODEL to pin one.
+# Ordered best-first, and verified against what this key actually serves (see
+# .github/workflows/groq_models.yml — the Llama line is gone from this account,
+# which is what took the pipeline down). Reasoning models are last resort: they
+# spend the token budget on hidden reasoning, which truncates the story JSON.
 GROQ_MODELS = [m for m in [
     os.environ.get("GROQ_MODEL"),
-    "llama-3.1-8b-instant",
-    "openai/gpt-oss-120b",
-    "moonshotai/kimi-k2-instruct",
-    "llama-3.3-70b-versatile",
+    "qwen/qwen3.8-27b",       # clean prose, no reasoning preamble
+    "openai/gpt-oss-120b",    # works, but reasoning eats the budget
+    "openai/gpt-oss-20b",
+    "allam-2-7b",             # small and Arabic-focused; quality fallback only
 ] if m]
 _active_model = None
+
+# A 260-360 word story plus its JSON envelope (dna, curve, keywords, YouTube
+# title/description/tags) runs ~1200 tokens. The old 1500 left no margin, so a
+# slightly long response was cut mid-string and failed to parse. Override with
+# the GROQ_MAX_TOKENS repo variable if stories start getting clipped again.
+MAX_TOKENS = int(os.environ.get("GROQ_MAX_TOKENS") or 4000)
 
 QUEUE_TARGET = 4
 
@@ -173,7 +183,7 @@ def call_groq(system: str, user: str) -> dict:
                     "model": model,
                     "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
                     "temperature": 0.9,
-                    "max_tokens": 1500,
+                    "max_tokens": MAX_TOKENS,
                 },
                 timeout=60,
             )
@@ -199,7 +209,29 @@ def call_groq(system: str, user: str) -> dict:
             f"Check https://console.groq.com/docs/models and set the GROQ_MODEL secret."
         )
 
-    text = resp.json()["choices"][0]["message"]["content"]
+    choice = resp.json()["choices"][0]
+    text = choice["message"].get("content") or ""
+
+    # Say plainly when the model ran out of room, rather than surfacing it as a
+    # baffling "Expecting ',' delimiter" from the half-written JSON. This is the
+    # exact failure that produced 0 stories on run #195.
+    if choice.get("finish_reason") == "length":
+        raise ValueError(
+            f"response hit the {MAX_TOKENS}-token cap and was cut off mid-JSON "
+            f"(model {_active_model}). Raise GROQ_MAX_TOKENS, or switch to a "
+            f"model that does not spend the budget on hidden reasoning."
+        )
+    if not text.strip():
+        raise ValueError(
+            f"model {_active_model} returned empty content — it likely spent the "
+            f"whole {MAX_TOKENS}-token budget on hidden reasoning."
+        )
+
+    # Some models narrate before answering. Drop <think> blocks and markdown
+    # fences so a good story is not thrown away over its wrapper.
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    text = re.sub(r"^\s*```(?:json)?|```\s*$", "", text.strip(), flags=re.MULTILINE)
+
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise ValueError(f"No JSON found in response: {text[:300]}")

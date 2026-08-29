@@ -33,6 +33,9 @@ jobs:
           # unset to let generate_stories_cloud.py pick the first model in its
           # fallback list that Groq still serves.
           GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          # Optional: raise if stories start getting clipped mid-sentence.
+          # Unset means the 4000 default in generate_stories_cloud.py.
+          GROQ_MAX_TOKENS: ${{ vars.GROQ_MAX_TOKENS }}
         shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
         run: python generate_stories_cloud.py 2>&1 | tee -a /tmp/pipeline.log
 
