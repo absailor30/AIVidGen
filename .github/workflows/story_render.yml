@@ -28,6 +28,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          # Optional: pin a specific Groq model. Set as a repository *variable*
+          # (Settings > Secrets and variables > Actions > Variables). Leave it
+          # unset to let generate_stories_cloud.py pick the first model in its
+          # fallback list that Groq still serves.
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
         run: python generate_stories_cloud.py
 
       - name: Render + upload next queued story

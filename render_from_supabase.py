@@ -285,8 +285,13 @@ def main():
 
     row = claim_next_story(sb, theme)
     if not row:
-        print(f"[main] No queued stories{f' for theme {theme}' if theme else ''}. Exiting.")
-        return
+        # Nothing to post is a failure, not a no-op: it means generation is
+        # broken upstream. Exit non-zero so the Telegram alert fires rather
+        # than the run going green having published nothing.
+        raise SystemExit(
+            f"[main] FATAL: no queued stories{f' for theme {theme}' if theme else ''} — "
+            f"nothing to post. The story generator is not filling the queue."
+        )
 
     story = row["payload"]
     print(f"[main] Rendering: {story['title']} ({story['theme']})")
