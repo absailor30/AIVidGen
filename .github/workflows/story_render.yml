@@ -33,7 +33,8 @@ jobs:
           # unset to let generate_stories_cloud.py pick the first model in its
           # fallback list that Groq still serves.
           GROQ_MODEL: ${{ vars.GROQ_MODEL }}
-        run: python generate_stories_cloud.py
+        shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
+        run: python generate_stories_cloud.py 2>&1 | tee -a /tmp/pipeline.log
 
       - name: Render + upload next queued story
         env:
@@ -47,11 +48,26 @@ jobs:
           YOUTUBE_PLAYLIST_ID: ${{ secrets.YOUTUBE_PLAYLIST_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
-        run: python render_from_supabase.py
+        shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
+        run: python render_from_supabase.py 2>&1 | tee -a /tmp/pipeline.log
 
+      # Send the actual error, not just a link. A bare "it failed" meant every
+      # past alert required opening Actions to learn anything; the tail of the
+      # log is usually enough to tell a retired model from a real bug.
+      # Send the actual error, not just a link. A bare "it failed" meant every
+      # past alert required opening Actions to learn anything; the tail of the
+      # log is usually enough to tell a retired model from a real bug.
       - name: Notify Telegram on failure
         if: failure()
+        shell: bash
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
+          TAIL=$(tail -c 2000 /tmp/pipeline.log 2>/dev/null || true)
+          [ -n "$TAIL" ] || TAIL="(no output captured - the job died before the scripts ran)"
+          MSG=$(printf 'Twisty StoryVault FAILED (run #%s)\n\n%s\n\n%s\n\nTry /logs for detail, or /fix to auto-repair a retired model.' \
+            "$RUN_NUMBER" "$TAIL" "$RUN_URL")
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d text="Twisty StoryVault render FAILED (run #${{ github.run_number }}). ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            --data-urlencode chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="$MSG" > /dev/null
