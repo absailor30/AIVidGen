@@ -28,14 +28,15 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          # Optional: pin a specific Groq model. Set as a repository *variable*
-          # (Settings > Secrets and variables > Actions > Variables). Leave it
-          # unset to let generate_stories_cloud.py pick the first model in its
-          # fallback list that Groq still serves.
-          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          # Optional: pin a specific Groq model. Accepted as either a repo
+          # variable or a secret (Settings > Secrets and variables > Actions),
+          # since neither is sensitive and it is easy to add under the wrong
+          # tab. Unset lets generate_stories_cloud.py walk its fallback chain.
+          GROQ_MODEL: ${{ vars.GROQ_MODEL || secrets.GROQ_MODEL }}
           # Optional: raise if stories start getting clipped mid-sentence.
-          # Unset means the 4000 default in generate_stories_cloud.py.
-          GROQ_MAX_TOKENS: ${{ vars.GROQ_MAX_TOKENS }}
+          # Variable or secret, as above. Unset means the 4000 default in
+          # generate_stories_cloud.py.
+          GROQ_MAX_TOKENS: ${{ vars.GROQ_MAX_TOKENS || secrets.GROQ_MAX_TOKENS }}
         shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
         run: python generate_stories_cloud.py 2>&1 | tee -a /tmp/pipeline.log
 
