@@ -9,6 +9,13 @@ on:
 jobs:
   render:
     runs-on: ubuntu-latest
+    env:
+      # Python block-buffers stdout when piped into tee, so on a timeout kill
+      # the buffer is lost — run #197 uploaded to YouTube successfully and the
+      # "[main] Uploaded: ..." line never reached the log. That also silently
+      # truncates the tail the failure alert quotes, which is the whole point
+      # of capturing it.
+      PYTHONUNBUFFERED: "1"
     # Generation + render + upload needs more than 20min in the worst case:
     # run #197 rendered a 107s video successfully at 18:13:32 and was killed
     # at 18:15:05 partway through the upload. Refilling an empty queue can

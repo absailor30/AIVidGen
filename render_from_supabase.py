@@ -319,6 +319,7 @@ def main():
         sys.exit(1)
 
     instagram_id = None
+    instagram_error = None
     if os.environ.get("IG_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
         storage_path = None
         try:
@@ -326,7 +327,12 @@ def main():
             instagram_id = upload_to_instagram(signed_url, story["publishing_kit"])
             print(f"[main] Posted to Instagram: media id {instagram_id}")
         except Exception as e:
-            print(f"[main] Instagram publish failed (video still rendered locally): {e}")
+            # Remembered, not swallowed. The state write below still happens so
+            # the story is never re-posted to YouTube, but the job then exits
+            # non-zero so the Telegram alert fires — an Instagram outage used
+            # to be invisible, reported as a fully successful run.
+            instagram_error = str(e)
+            print(f"[main] Instagram publish failed (YouTube post is live): {e}")
         finally:
             if storage_path:
                 delete_from_storage(sb, storage_path)
@@ -351,7 +357,17 @@ def main():
     }).execute()
     sb.table("story_queue").update({
         "rendered": True, "youtube_id": youtube_id, "instagram_id": instagram_id,
+        "error": f"instagram: {instagram_error}" if instagram_error else None,
     }).eq("id", row["id"]).execute()
+
+    if instagram_error:
+        # State is recorded above, so this story will not be rendered or
+        # re-posted; the non-zero exit only exists to raise the alarm.
+        raise SystemExit(
+            f"[main] YouTube post is live (id {youtube_id}) but Instagram failed: "
+            f"{instagram_error}"
+        )
+
     print("[main] Done.")
 
 
