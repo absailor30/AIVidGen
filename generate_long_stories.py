@@ -4,17 +4,15 @@ generate_long_stories.py — fills the `long` lane of the Supabase story queue.
 Long-form is a 10-minute, 16:9, YouTube-only video with a deliberate retention
 structure (see LONG_BRIEF). It is generated in FIVE Groq calls rather than one:
 
-  1. plan     — title, dna, keywords, publishing kit, and a brief per beat
-  2. opening  — hook + lock-in + body 1 + rehook 1        (~3m30)
-  3. middle   — body 2 + rehook 2 + body 3 + rehook 3     (~3m30)
-  4. truth    — the reveal                                 (~1m00)
-  5. close    — closing + spoken Subscribe CTA             (~2m00)
+  1. plan  — title, dna, keywords, publishing kit, and a brief per beat
+  2-12.    — one call per narrative beat, in order
 
-Why sectioned rather than one big call: a 27B model asked for eight named beats
-totalling ~2000 words in one response compresses the later ones, which is
-exactly what makes the 7/1/1.5/0.5-minute split land or not. Sections also mean
-a single bad section is retried instead of regenerating the whole story, and
-they keep each response small enough that finish_reason="length" stays rare.
+Why one call per beat: the first version asked for section-sized chunks (~718
+words covering four beats) and the model overshot every single time — 881,
+1177, 1103 words against a 632-804 band. Length compliance collapses as the
+target grows. A single beat at 62-325 words is something a 27B model can
+actually hit, a bad beat is retried on its own, and a retry that overshot is
+told by how much so the next attempt corrects rather than re-rolling.
 
 Shares the model fallback chain, theme rotation and Groq plumbing with
 generate_stories_cloud.py. Run with the same env as that script:
@@ -33,8 +31,9 @@ import time
 from supabase import create_client
 
 from generate_stories_cloud import (
+    BEAT_ORDER,
+    LONG_BEATS,
     LONG_MIN_KEYWORD_TERMS,
-    LONG_SECTIONS,
     LONG_TOTAL_MAX,
     LONG_TOTAL_MIN,
     QUEUE_TARGETS,
@@ -51,7 +50,7 @@ TARGET_DURATION_SECONDS = 600
 # Groq's free-tier rate limiting; batching would spend the whole job on
 # generation and leave nothing for the render.
 STORIES_PER_RUN = 1
-MAX_SECTION_ATTEMPTS = 3    # per section
+MAX_BEAT_ATTEMPTS = 4       # per beat, with corrective feedback between tries
 MAX_STORY_ATTEMPTS = 2      # whole-story restarts
 
 LONG_BRIEF = """You are the head writer for "Twisty! StoryVault", a faceless
@@ -138,22 +137,29 @@ same three clips for ten minutes is a failure.
 variables_changed must list at least 6 items. score must be 85 or higher.
 Output valid JSON only."""
 
-SECTION_SCHEMA = """Respond with ONLY a single JSON object (no markdown fences,
+BEAT_SCHEMA = """Respond with ONLY a single JSON object (no markdown fences,
 no commentary), matching exactly:
 
-{"section": "<SECTION_NAME>", "text": "... the prose ..."}
+{"beat": "<BEAT_NAME>", "text": "... the prose for this beat only ..."}
 
 Output valid JSON only."""
 
-# Which beats each prose call is responsible for.
-SECTION_BEATS = {
-    "opening": ["hook", "lock_in", "body_1", "rehook_1"],
-    "middle": ["body_2", "rehook_2", "body_3", "rehook_3"],
-    "truth": ["truth"],
-    "closing": ["closing"],
-    "cta": ["cta"],
+# Human-readable role for each beat, so the prose call knows its job without
+# re-reading the whole structure brief.
+BEAT_ROLE = {
+    "hook": "Open mid-consequence on the sharpest image in the story. No preamble.",
+    "lock_in": "Promise the specific question this video answers, and set the stakes.",
+    "body_1": "The setup: who these people are and what normal looked like before.",
+    "rehook_1": "A short forward-reference that re-buys attention.",
+    "body_2": "The betrayal surfaces. Escalate the pressure.",
+    "rehook_2": "Another forward-reference, sharper than the first.",
+    "body_3": "The confrontation or discovery that forces the narrator's hand.",
+    "rehook_3": "The final tease, pointing straight at the reveal.",
+    "truth": "The reveal lands, plainly and completely. No new mysteries.",
+    "closing": "Consequences and vindication, earned rather than lucky. Tie it off.",
+    "cta": ("Step out of the story and speak to the viewer. Ask the binary "
+            "question the story raises, then an explicit call to SUBSCRIBE."),
 }
-SECTION_ORDER = ["opening", "middle", "truth", "closing", "cta"]
 
 
 def _plan_prompt(theme: str, recent: list) -> tuple[str, str]:
@@ -167,30 +173,37 @@ def _plan_prompt(theme: str, recent: list) -> tuple[str, str]:
     return system, user
 
 
-def _section_prompt(plan: dict, name: str, previous_tail: str) -> tuple[str, str]:
-    spec = LONG_SECTIONS[name]
-    beats = SECTION_BEATS[name]
-    briefs = {b: plan["beats"].get(b, "") for b in beats}
+def _beat_prompt(plan: dict, name: str, previous_tail: str, correction: str = "") -> tuple[str, str]:
+    spec = LONG_BEATS[name]
+    brief = plan["beats"].get(name, "")
 
     system = (
         f"{LONG_BRIEF}\n\n{STRUCTURE}\n\n"
-        f"{SECTION_SCHEMA.replace('<SECTION_NAME>', name)}"
+        f"{BEAT_SCHEMA.replace('<BEAT_NAME>', name)}"
     )
 
     continuity = (
-        f"The previous section ended with:\n...{previous_tail}\n\n"
+        f"The story so far ended with:\n...{previous_tail}\n\n"
         f"Continue seamlessly from there. Do not recap it.\n\n"
         if previous_tail else ""
     )
+    # Sentence count alongside the word count: models track sentences far more
+    # reliably than words, so it gives the length instruction a second handle.
+    sentences = max(2, round(spec["target"] / 18))
     user = (
-        f"Story plan:\n{json.dumps({k: v for k, v in plan.items() if k != 'publishing_kit'}, ensure_ascii=False)}\n\n"
+        f"Story plan:\n"
+        f"{json.dumps({k: v for k, v in plan.items() if k not in ('publishing_kit', 'beats')}, ensure_ascii=False)}\n\n"
         f"{continuity}"
-        f"Write ONLY the \"{name}\" section, covering these beats in order:\n"
-        f"{json.dumps(briefs, ensure_ascii=False, indent=2)}\n\n"
-        f"LENGTH: aim for {spec['target']} words. It must be between {spec['min']} "
-        f"and {spec['max']} words — this section is narrated for about "
-        f"{spec['seconds']} seconds and the timing matters. Write to the target, "
-        f"do not pad and do not rush."
+        f"Write ONLY the \"{name}\" beat.\n"
+        f"Its job: {BEAT_ROLE[name]}\n"
+        f"Planned content: {brief}\n\n"
+        f"LENGTH IS A HARD REQUIREMENT: exactly {spec['target']} words, give or "
+        f"take. It must land between {spec['min']} and {spec['max']} words — "
+        f"roughly {sentences} sentences. This beat is narrated for about "
+        f"{spec['seconds']} seconds and the pacing of the whole video depends "
+        f"on it. Write this beat only; later beats cover the rest of the story, "
+        f"so do not get ahead of yourself.\n"
+        f"{correction}"
     )
     return system, user
 
@@ -215,21 +228,32 @@ def generate_long_story(theme: str, recent: list) -> dict:
 
     sections: dict[str, str] = {}
     previous_tail = ""
-    for name in SECTION_ORDER:
-        spec = LONG_SECTIONS[name]
+    for name in BEAT_ORDER:
+        spec = LONG_BEATS[name]
         last_error = None
-        for attempt in range(MAX_SECTION_ATTEMPTS):
+        correction = ""
+        for attempt in range(MAX_BEAT_ATTEMPTS):
             try:
-                result = call_groq(*_section_prompt(plan, name, previous_tail))
+                result = call_groq(*_beat_prompt(plan, name, previous_tail, correction))
                 text = str(result.get("text", "")).strip()
                 if not text:
-                    raise ValueError("empty section text")
+                    raise ValueError("empty beat text")
                 n = len(text.split())
-                if not (spec["min"] <= n <= spec["max"]):
-                    raise ValueError(
-                        f"{n} words, need {spec['min']}-{spec['max']}"
+                if n > spec["max"] or n < spec["min"]:
+                    # Tell the model HOW it missed. A bare retry just re-rolls
+                    # the same distribution — this is what fixed the original
+                    # 881/1177/1103-word overshoot.
+                    direction = "TOO LONG" if n > spec["max"] else "TOO SHORT"
+                    delta = n - spec["target"]
+                    correction = (
+                        f"\nYour previous attempt was {n} words — {direction} by "
+                        f"{abs(delta)} words against the {spec['target']}-word target. "
+                        f"{'Cut detail and tighten sentences.' if delta > 0 else 'Add specific detail and scene.'} "
+                        f"Return {spec['target']} words this time."
                     )
+                    raise ValueError(f"{n} words, need {spec['min']}-{spec['max']}")
                 if name == "cta" and "subscribe" not in text.lower():
+                    correction = "\nYour previous attempt omitted the word 'subscribe'. It must appear."
                     raise ValueError("cta must contain an explicit 'Subscribe'")
                 sections[name] = text
                 previous_tail = _tail(text)
@@ -240,12 +264,12 @@ def generate_long_story(theme: str, recent: list) -> dict:
                 print(f"[long]   {name} attempt {attempt + 1} failed: {e}")
                 time.sleep(2)
         else:
-            raise ValueError(f"section '{name}' failed {MAX_SECTION_ATTEMPTS}x: {last_error}")
+            raise ValueError(f"beat '{name}' failed {MAX_BEAT_ATTEMPTS}x: {last_error}")
 
     story = {k: v for k, v in plan.items() if k != "beats"}
     story["beats"] = plan["beats"]
     story["sections"] = sections
-    story["story"] = "\n\n".join(sections[n] for n in SECTION_ORDER)
+    story["story"] = "\n\n".join(sections[n] for n in BEAT_ORDER)
     story["target_duration_seconds"] = TARGET_DURATION_SECONDS
     return story
 
