@@ -78,19 +78,37 @@ REQUIRED_KIT_KEYS = ["youtube_title", "youtube_description", "youtube_tags",
 # downstream reads them for that variant (upload_to_youtube uses only these).
 REQUIRED_KIT_KEYS_LONG = ["youtube_title", "youtube_description", "youtube_tags"]
 
-# Per-section word budgets for the long variant, derived from the narration
-# rate: JennyNeural is ~2.85 words/sec at 1.0x, and long-form renders at 1.2x,
-# so ~3.42 words/sec. Sections exist so one bad section can be regenerated
-# without discarding the whole ~2000-word story.
-LONG_SECTIONS = {
-    #  name        seconds  target  min   max
-    "opening": {"seconds": 210, "target": 718, "min": 632, "max": 804},
-    "middle":  {"seconds": 210, "target": 718, "min": 632, "max": 804},
-    "truth":   {"seconds":  60, "target": 205, "min": 180, "max": 230},
-    "closing": {"seconds":  90, "target": 308, "min": 271, "max": 345},
-    "cta":     {"seconds":  30, "target": 103, "min":  91, "max": 115},
+# Per-BEAT word budgets for the long variant, derived from the narration rate:
+# JennyNeural is ~2.85 words/sec at 1.0x, and long-form renders at 1.2x, so
+# ~3.42 words/sec.
+#
+# These are per-beat rather than per-section because the first attempt at
+# section-sized targets failed every time: asked for a 718-word chunk covering
+# four beats, the model returned 881, 1177 and 1103 words — consistently ~45%
+# over, and an identical retry just rolls the same dice. A single narrative
+# beat with a ~100-325 word target is something a 27B model can actually hit.
+#
+# Total targets 565s (~9.4 min), deliberately under the 10-minute ceiling so
+# that even a run of long-ish beats stays near it.
+LONG_BEATS = {
+    #            seconds  target  min   max
+    "hook":     {"seconds": 28, "target":  96, "min":  67, "max": 125},
+    "lock_in":  {"seconds": 28, "target":  96, "min":  67, "max": 125},
+    "body_1":   {"seconds": 95, "target": 325, "min": 266, "max": 384},
+    "rehook_1": {"seconds": 18, "target":  62, "min":  43, "max":  81},
+    "body_2":   {"seconds": 95, "target": 325, "min": 266, "max": 384},
+    "rehook_2": {"seconds": 18, "target":  62, "min":  43, "max":  81},
+    "body_3":   {"seconds": 95, "target": 325, "min": 266, "max": 384},
+    "rehook_3": {"seconds": 18, "target":  62, "min":  43, "max":  81},
+    "truth":    {"seconds": 57, "target": 195, "min": 160, "max": 230},
+    "closing":  {"seconds": 85, "target": 291, "min": 239, "max": 343},
+    "cta":      {"seconds": 28, "target":  96, "min":  67, "max": 125},
 }
-LONG_TOTAL_MIN, LONG_TOTAL_MAX = 1847, 2257
+BEAT_ORDER = list(LONG_BEATS)
+
+# Per-beat bands alone would allow 7.4-11.4 min; this gate keeps the aggregate
+# sane even when several beats land at opposite ends of their range.
+LONG_TOTAL_MIN, LONG_TOTAL_MAX = 1700, 2250
 LONG_MIN_KEYWORD_TERMS = 10
 
 AUTOMATION_TAIL = """
@@ -183,21 +201,21 @@ def validate_story(story: dict, variant: str = "short"):
 
 
 def _validate_long(story: dict):
-    """Long-form: per-section budgets, a real keyword list, and a spoken CTA."""
+    """Long-form: per-beat budgets, a real keyword list, and a spoken CTA."""
     sections = story.get("sections")
     if not isinstance(sections, dict):
         raise ValueError("long story needs a 'sections' object")
-    missing = [k for k in LONG_SECTIONS if k not in sections]
+    missing = [k for k in LONG_BEATS if k not in sections]
     if missing:
-        raise ValueError(f"sections missing: {missing}")
+        raise ValueError(f"beats missing: {missing}")
 
-    # Per-section counts are what make a single-section retry possible; a total
-    # that happens to land in range can still hide a collapsed truth-reveal.
-    for name, spec in LONG_SECTIONS.items():
+    # Per-beat counts are what make a single-beat retry possible; a total that
+    # happens to land in range can still hide a collapsed truth-reveal.
+    for name, spec in LONG_BEATS.items():
         n = len(str(sections[name]).split())
         if not (spec["min"] <= n <= spec["max"]):
             raise ValueError(
-                f"section '{name}' is {n} words, outside {spec['min']}-{spec['max']} "
+                f"beat '{name}' is {n} words, outside {spec['min']}-{spec['max']} "
                 f"(target {spec['target']} for {spec['seconds']}s)"
             )
 
