@@ -60,11 +60,65 @@ SATISFYING_KEYWORDS = [
 ]
 
 STORY_VOICE = "en-US-JennyNeural"
-# Snappier delivery, by request. Calibration note: JennyNeural runs ~2.85
-# words/sec at 1.0x, so a ~300-word story lands ~100-110s there; at 1.4x the
-# same story runs ~75-80s, below the 90-120s the 4-beat format was written for.
-# Drop back to 1.0 if the endings start feeling rushed.
+# Calibration note: JennyNeural runs ~2.85 words/sec at 1.0x. At the short
+# variant's 1.4x a ~300-word story runs ~75-80s; at the long variant's 1.2x the
+# rate is ~3.42 words/sec, which is what the long word budgets are derived from.
 VOICE_SPEED = 1.4
+
+# Everything that differs between the two video formats. The short profile
+# reproduces exactly what shipped before this table existed — see
+# test_variant_profiles.py, which asserts the payload byte-for-byte.
+VARIANT_PROFILES = {
+    "short": {
+        "aspect": "9:16",
+        "voice_rate": 1.4,
+        "clip_duration": 3,
+        "subtitle_enabled": True,
+        "font_size": 50,
+        "subtitle_position": "custom",
+        # 66% down the frame: high enough to clear the Shorts/Reels UI buttons.
+        "custom_position": 66.0,
+        "n_threads": None,          # leave the schema default (2)
+        "bgm_type": None,           # leave the schema default ("random")
+        "edge_tts_timeout": None,   # 30s default is plenty for ~80s of audio
+        "instagram": True,
+    },
+    "long": {
+        "aspect": "16:9",
+        "voice_rate": 1.2,
+        # The single most important long-form knob. At 3s a 600s video means
+        # ~200 separate subclip encodes and only ~60s of unique footage; at 8s
+        # it is ~75 encodes and each Pexels hit contributes 8s instead of 3s.
+        "clip_duration": 8,
+        # Off deliberately. At ~250 cues the renderer builds every caption as a
+        # TextClip and composites them all at once, and its subtitle builder is
+        # all-or-nothing: one line mismatch writes NO file and only logs a
+        # warning, producing a silently caption-less video. YouTube
+        # auto-captions cover long-form, and unlike Shorts there is no platform
+        # UI to dodge. Proper uploaded captions are the v2 route.
+        "subtitle_enabled": False,
+        "font_size": 64,
+        "subtitle_position": "bottom",
+        "custom_position": 88.0,
+        "n_threads": 4,             # ubuntu-latest has 4 vCPU; default 2 idles half
+        "bgm_type": "random",       # ten minutes of dry narration is a hard sit
+        # edge_tts applies ONE total timeout to the whole synthesis (a deadline
+        # set once before the consume loop, app/services/voice.py). The 30s
+        # default kills a 10-minute narration outright.
+        "edge_tts_timeout": 900,
+        "instagram": False,
+    },
+}
+
+
+def _profile(variant: str) -> dict:
+    try:
+        return VARIANT_PROFILES[variant]
+    except KeyError:
+        raise SystemExit(
+            f"[main] Unknown STORY_VARIANT {variant!r}; expected one of "
+            f"{sorted(VARIANT_PROFILES)}"
+        )
 
 
 def supabase_client():
@@ -73,8 +127,11 @@ def supabase_client():
     return create_client(url, key)
 
 
-def claim_next_story(sb, theme: str | None = None):
-    query = sb.table("story_queue").select("*").is_("claimed_at", "null").order("id").limit(1)
+def claim_next_story(sb, theme: str | None = None, variant: str = "short"):
+    query = (
+        sb.table("story_queue").select("*")
+        .is_("claimed_at", "null").eq("variant", variant).order("id").limit(1)
+    )
     if theme:
         query = query.eq("theme", theme)
     rows = query.execute().data
@@ -85,7 +142,9 @@ def claim_next_story(sb, theme: str | None = None):
     return row
 
 
-def render_video(story: dict) -> str | None:
+def build_payload(story: dict, variant: str = "short") -> dict:
+    """The TaskVideoRequest fields for one story, per variant profile."""
+    p = _profile(variant)
     payload = {
         "video_subject": story["title"],
         "video_script": story["story"],
@@ -93,15 +152,15 @@ def render_video(story: dict) -> str | None:
             random.sample(SATISFYING_KEYWORDS, k=min(4, len(SATISFYING_KEYWORDS)))
             if SATISFYING_BACKGROUND else story["keywords"]
         ),
-        "video_aspect": "9:16",
+        "video_aspect": p["aspect"],
         "video_language": "en",
         "voice_name": STORY_VOICE,
-        "voice_rate": VOICE_SPEED,
+        "voice_rate": p["voice_rate"],
         "video_source": "pexels",
         "pexels_api_key": os.environ["PEXELS_API_KEY"],
         "video_count": 1,
-        "video_clip_duration": 3,
-        "subtitle_enabled": True,  # burned-in — Instagram has no auto-caption equivalent for API-published Reels
+        "video_clip_duration": p["clip_duration"],
+        "subtitle_enabled": p["subtitle_enabled"],
         # Must be an actual filename in resource/fonts/ — "Arial" (no such file)
         # crashed the render thread silently (AIVidGen doesn't mark it failed on
         # an uncaught exception, it just hangs at whatever progress it had).
@@ -110,16 +169,39 @@ def render_video(story: dict) -> str | None:
         "text_background_color": False,
         "stroke_color": "#000000",
         "stroke_width": 2,
-        "font_size": 50,                     # smaller so most cues wrap to ~2 lines (no hard cap available)
-        "subtitle_position": "custom",
-        "custom_position": 66.0,  # ~top of the bottom third — default "bottom" (95%) gets covered by platform UI
+        "font_size": p["font_size"],
+        "subtitle_position": p["subtitle_position"],
+        "custom_position": p["custom_position"],
     }
+    # Only set these when the profile overrides the schema default, so the short
+    # payload stays byte-identical to what shipped before this refactor.
+    if p["n_threads"] is not None:
+        payload["n_threads"] = p["n_threads"]
+    if p["bgm_type"] is not None:
+        payload["bgm_type"] = p["bgm_type"]
+    return payload
+
+
+def render_video(story: dict, variant: str = "short") -> str | None:
+    p = _profile(variant)
+
+    # edge_tts applies a single TOTAL timeout to the whole synthesis, so a long
+    # narration needs it raised or it is killed at 30s. Same injection pattern
+    # as the Pexels key above.
+    if p["edge_tts_timeout"] is not None:
+        config.app["edge_tts_timeout"] = p["edge_tts_timeout"]
+
+    payload = build_payload(story, variant)
     params = TaskVideoRequest(**payload)
     task_id = utils.get_uuid()
     sm.state.update_task(task_id)
     task.start(task_id, params, stop_at="video")
 
     result = sm.state.get_task(task_id)
+    audio_seconds = result.get("audio_duration")
+    if audio_seconds:
+        print(f"[render] Narration length: {audio_seconds}s "
+              f"({len(story['story'].split())} words at {p['voice_rate']}x)")
     if result.get("state") != 1:  # TASK_STATE_COMPLETE
         print(f"[render] Task did not complete successfully: state={result.get('state')}")
         return None
@@ -282,22 +364,27 @@ def upload_to_instagram(video_url: str, kit: dict) -> str | None:
 
 def main():
     theme = sys.argv[1] if len(sys.argv) > 1 else None
+    variant = os.environ.get("STORY_VARIANT") or "short"
+    p = _profile(variant)
+    print(f"[main] Variant: {variant} ({p['aspect']}, {p['voice_rate']}x, "
+          f"subtitles {'on' if p['subtitle_enabled'] else 'off'})")
     sb = supabase_client()
 
-    row = claim_next_story(sb, theme)
+    row = claim_next_story(sb, theme, variant)
     if not row:
         # Nothing to post is a failure, not a no-op: it means generation is
         # broken upstream. Exit non-zero so the Telegram alert fires rather
         # than the run going green having published nothing.
         raise SystemExit(
-            f"[main] FATAL: no queued stories{f' for theme {theme}' if theme else ''} — "
-            f"nothing to post. The story generator is not filling the queue."
+            f"[main] FATAL: no queued {variant} stories"
+            f"{f' for theme {theme}' if theme else ''} — nothing to post. "
+            f"The story generator is not filling the {variant} queue."
         )
 
     story = row["payload"]
     print(f"[main] Rendering: {story['title']} ({story['theme']})")
 
-    video_path = render_video(story)
+    video_path = render_video(story, variant)
     if not video_path:
         # Release the claim so the next run retries this story instead of leaving it stuck.
         sb.table("story_queue").update({"error": "render failed", "claimed_at": None}).eq("id", row["id"]).execute()
@@ -320,7 +407,12 @@ def main():
 
     instagram_id = None
     instagram_error = None
-    if os.environ.get("IG_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
+    if not p["instagram"]:
+        # Belt and braces. Not passing the IG env vars is already enough, but
+        # this makes a 16:9 ten-minute video un-postable to Reels even if a
+        # future edit copies the short workflow's env block wholesale.
+        print(f"[main] Skipping Instagram — {variant} variant is YouTube-only.")
+    elif os.environ.get("IG_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
         storage_path = None
         try:
             storage_path, signed_url = get_signed_video_url(sb, video_path, row["id"])
@@ -341,6 +433,7 @@ def main():
 
     dna = story["dna"]
     sb.table("story_state").insert({
+        "variant": variant,
         "theme": story["theme"],
         "title": story["title"],
         "hook": dna.get("hook"),

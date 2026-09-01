@@ -18,7 +18,13 @@
 //   curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=<WORKER_URL>"
 
 const REPO = "absailor30/AIVidGen";
-const WORKFLOW = "story_render.yml";
+const WORKFLOW = "story_render.yml";              // 9:16 Shorts + Reels
+const WORKFLOW_LONG = "story_render_long.yml";    // 16:9 10-minute, YouTube only
+
+// Cron expressions that should fire the LONG workflow. Everything else fires
+// the short one. Add the matching trigger in the Cloudflare dashboard too —
+// listing it here alone does nothing.
+const LONG_CRONS = new Set(["30 21 * * *"]);      // 03:00 IST, off-peak
 
 // Preference order when /fix picks a replacement model: bigger/better first,
 // filtered against what Groq actually serves at that moment.
@@ -69,9 +75,12 @@ export default {
   //   0 3 * * *    (08:30 IST)   0 7 * * *   (12:30 IST)
   //   15 11 * * *  (16:45 IST)   0 15 * * *  (20:30 IST)
   async scheduled(event, env, ctx) {
+    // Which workflow a slot fires is decided by the cron expression, so the
+    // long-form slot cannot accidentally queue a Short (or vice versa).
+    const workflow = LONG_CRONS.has(event.cron) ? WORKFLOW_LONG : WORKFLOW;
     // Scheduled renders are silent unless something goes wrong — the video
     // appearing on the channel is the success signal. Only failures ping.
-    ctx.waitUntil(triggerRender(env, { announce: false }));
+    ctx.waitUntil(triggerRender(env, { announce: false, workflow }));
   },
 };
 
@@ -85,6 +94,8 @@ async function handleCommand(env, rawText) {
     case "/render":
     case "/run":
       return triggerRender(env, { announce: true });
+    case "/renderlong":
+      return triggerRender(env, { announce: true, workflow: WORKFLOW_LONG });
     case "/status":
       return reportStatus(env);
     case "/logs":
@@ -108,7 +119,8 @@ async function handleCommand(env, rawText) {
 const HELP = `Twisty! StoryVault controls
 
 /status  - queue depth, last run, current model
-/render  - render and post one story now
+/render  - render and post one Short now
+/renderlong - render and post one 10-min long-form video now
 /logs    - tail the last run's log
 /models  - list the models Groq currently serves
 /model   - show the pinned model
@@ -118,54 +130,67 @@ const HELP = `Twisty! StoryVault controls
 
 // --- actions ---------------------------------------------------------------
 
-async function triggerRender(env, { announce }) {
+async function triggerRender(env, { announce, workflow = WORKFLOW }) {
+  const label = workflow === WORKFLOW_LONG ? "Long-form render" : "Render";
   // Guard against duplicate invocations (a repeated cron firing, a retried
   // webhook delivery, or an impatient second /render) starting a second run.
-  const recent = await recentRun(env);
+  const recent = await recentRun(env, workflow);
   if (recent) {
     const agoMin = Math.round((Date.now() - Date.parse(recent.created_at)) / 60000);
     if (announce) {
       await sendTelegram(
         env,
-        `Already running: run #${recent.run_number} started ${agoMin}m ago (${recent.status}). Not starting a second one.`
+        `${label} already running: run #${recent.run_number} started ${agoMin}m ago (${recent.status}). Not starting a second one.`
       );
     }
     return;
   }
 
-  const resp = await gh(env, `/actions/workflows/${WORKFLOW}/dispatches`, {
+  const resp = await gh(env, `/actions/workflows/${workflow}/dispatches`, {
     method: "POST",
     body: JSON.stringify({ ref: "main" }),
   });
 
   if (resp.status === 204) {
     if (announce) {
-      await sendTelegram(env, "Render triggered — should be live on GitHub Actions within a minute.");
+      await sendTelegram(env, `${label} triggered — should be live on GitHub Actions within a minute.`);
     }
   } else {
     // Always announce a failure to dispatch, scheduled or not.
-    await sendTelegram(env, `Failed to trigger render: ${resp.status} ${await resp.text()}`);
+    await sendTelegram(env, `Failed to trigger ${label.toLowerCase()}: ${resp.status} ${await resp.text()}`);
   }
 }
 
 async function reportStatus(env) {
-  const [queue, run, model] = await Promise.all([
-    queueDepth(env),
+  const [shortQueue, longQueue, shortRun, longRun, model] = await Promise.all([
+    queueDepth(env, "short"),
+    queueDepth(env, "long"),
     latestRun(env),
+    latestRun(env, WORKFLOW_LONG),
     getModel(env).catch((e) => `unreadable (${e.message})`),
   ]);
 
-  const runLine = run
-    ? `#${run.run_number} ${run.status}/${run.conclusion || "-"} at ${run.created_at}`
-    : "none found";
-  const warn =
-    run && run.conclusion === "success" && queue === 0
-      ? "\n\nWarning: last run was green but the queue is empty — generation is producing nothing."
-      : "";
+  const fmt = (run) =>
+    run
+      ? `#${run.run_number} ${run.status}/${run.conclusion || "-"} at ${run.created_at}`
+      : "none found";
+
+  // A green run over an empty queue is the exact shape of the week-long
+  // outage: everything reports success while nothing is published.
+  const warnings = [];
+  if (shortRun && shortRun.conclusion === "success" && shortQueue === 0) {
+    warnings.push("short: last run was green but the queue is empty — generation is producing nothing.");
+  }
+  if (longRun && longRun.conclusion === "success" && longQueue === 0) {
+    warnings.push("long: last run was green but the queue is empty — generation is producing nothing.");
+  }
 
   await sendTelegram(
     env,
-    `Queue: ${queue} unclaimed\nLast run: ${runLine}\nModel: ${model || "(unpinned — using fallback chain)"}${warn}`
+    `Short (9:16, YT+IG)\n  queue: ${shortQueue} unclaimed\n  last run: ${fmt(shortRun)}\n\n` +
+      `Long (16:9, YT only)\n  queue: ${longQueue} unclaimed\n  last run: ${fmt(longRun)}\n\n` +
+      `Model: ${model || "(unpinned — using fallback chain)"}` +
+      (warnings.length ? `\n\nWarning:\n- ${warnings.join("\n- ")}` : "")
   );
 }
 
@@ -275,15 +300,15 @@ function gh(env, path, init = {}) {
   });
 }
 
-async function latestRun(env) {
-  const resp = await gh(env, `/actions/workflows/${WORKFLOW}/runs?per_page=1`);
+async function latestRun(env, workflow = WORKFLOW) {
+  const resp = await gh(env, `/actions/workflows/${workflow}/runs?per_page=1`);
   if (!resp.ok) return null;
   return ((await resp.json()).workflow_runs || [])[0] || null;
 }
 
 // A run created inside the duplicate window, or still going, whichever applies.
-async function recentRun(env) {
-  const resp = await gh(env, `/actions/workflows/${WORKFLOW}/runs?per_page=5`);
+async function recentRun(env, workflow = WORKFLOW) {
+  const resp = await gh(env, `/actions/workflows/${workflow}/runs?per_page=5`);
   if (!resp.ok) return null;
   const runs = (await resp.json()).workflow_runs || [];
   return (
@@ -295,9 +320,9 @@ async function recentRun(env) {
   );
 }
 
-async function queueDepth(env) {
+async function queueDepth(env, variant = "short") {
   const resp = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/story_queue?select=id&claimed_at=is.null`,
+    `${env.SUPABASE_URL}/rest/v1/story_queue?select=id&claimed_at=is.null&variant=eq.${variant}`,
     {
       headers: {
         apikey: env.SUPABASE_SERVICE_KEY,
