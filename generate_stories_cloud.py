@@ -44,7 +44,10 @@ _active_model = None
 # the GROQ_MAX_TOKENS repo variable if stories start getting clipped again.
 MAX_TOKENS = int(os.environ.get("GROQ_MAX_TOKENS") or 4000)
 
-QUEUE_TARGET = 4
+# How deep to keep each variant's queue. Long stories cost ~5 Groq calls each,
+# so a shallower buffer keeps a single run from spending its whole budget there.
+QUEUE_TARGETS = {"short": 4, "long": 2}
+QUEUE_TARGET = QUEUE_TARGETS["short"]   # back-compat for anything importing this
 
 # Compact system prompt. We deliberately do NOT send the full 28KB story bible
 # on every call — Groq's free tier is 12,000 tokens/MINUTE, and the bible alone
@@ -71,6 +74,24 @@ REQUIRED_KEYS = ["theme", "title", "story", "keywords", "dna", "curve",
 REQUIRED_DNA_KEYS = ["hook", "relationship", "conflict", "emotion", "payoff", "fingerprint"]
 REQUIRED_KIT_KEYS = ["youtube_title", "youtube_description", "youtube_tags",
                       "instagram_caption", "instagram_hashtags"]
+# Long-form is YouTube-only, so the Instagram fields are not required. Nothing
+# downstream reads them for that variant (upload_to_youtube uses only these).
+REQUIRED_KIT_KEYS_LONG = ["youtube_title", "youtube_description", "youtube_tags"]
+
+# Per-section word budgets for the long variant, derived from the narration
+# rate: JennyNeural is ~2.85 words/sec at 1.0x, and long-form renders at 1.2x,
+# so ~3.42 words/sec. Sections exist so one bad section can be regenerated
+# without discarding the whole ~2000-word story.
+LONG_SECTIONS = {
+    #  name        seconds  target  min   max
+    "opening": {"seconds": 210, "target": 718, "min": 632, "max": 804},
+    "middle":  {"seconds": 210, "target": 718, "min": 632, "max": 804},
+    "truth":   {"seconds":  60, "target": 205, "min": 180, "max": 230},
+    "closing": {"seconds":  90, "target": 308, "min": 271, "max": 345},
+    "cta":     {"seconds":  30, "target": 103, "min":  91, "max": 115},
+}
+LONG_TOTAL_MIN, LONG_TOTAL_MAX = 1847, 2257
+LONG_MIN_KEYWORD_TERMS = 10
 
 AUTOMATION_TAIL = """
 
@@ -130,26 +151,75 @@ Output valid JSON only.
 """
 
 
-def validate_story(story: dict):
+def _check_self_contained(text: str):
+    lowered = text.lower()
+    for banned in ("part 1", "part 2", "part one", "part two", "to be continued"):
+        if banned in lowered:
+            raise ValueError(f"story must be self-contained, found '{banned}'")
+
+
+def validate_story(story: dict, variant: str = "short"):
     missing = [k for k in REQUIRED_KEYS if k not in story]
     if missing:
         raise ValueError(f"Missing keys: {missing}")
     if any(k not in story["dna"] for k in REQUIRED_DNA_KEYS):
         raise ValueError("dna missing required keys")
-    if any(k not in story["publishing_kit"] for k in REQUIRED_KIT_KEYS):
+    kit_keys = REQUIRED_KIT_KEYS_LONG if variant == "long" else REQUIRED_KIT_KEYS
+    if any(k not in story["publishing_kit"] for k in kit_keys):
         raise ValueError("publishing_kit missing required keys")
     if len(story["variables_changed"]) < 6:
         raise ValueError("variables_changed needs >= 6 items")
     if story["score"] < 85:
         raise ValueError(f"score {story['score']} below 85")
+
+    if variant == "long":
+        return _validate_long(story)
+
     # Enforce the ~90-120s narration length (350-420 target, allow a little slack).
     word_count = len(story["story"].split())
     if not (260 <= word_count <= 360):
         raise ValueError(f"story word count {word_count} outside 260-360 range")
-    lowered = story["story"].lower()
-    for banned in ("part 1", "part 2", "part one", "part two", "to be continued"):
-        if banned in lowered:
-            raise ValueError(f"story must be self-contained, found '{banned}'")
+    _check_self_contained(story["story"])
+
+
+def _validate_long(story: dict):
+    """Long-form: per-section budgets, a real keyword list, and a spoken CTA."""
+    sections = story.get("sections")
+    if not isinstance(sections, dict):
+        raise ValueError("long story needs a 'sections' object")
+    missing = [k for k in LONG_SECTIONS if k not in sections]
+    if missing:
+        raise ValueError(f"sections missing: {missing}")
+
+    # Per-section counts are what make a single-section retry possible; a total
+    # that happens to land in range can still hide a collapsed truth-reveal.
+    for name, spec in LONG_SECTIONS.items():
+        n = len(str(sections[name]).split())
+        if not (spec["min"] <= n <= spec["max"]):
+            raise ValueError(
+                f"section '{name}' is {n} words, outside {spec['min']}-{spec['max']} "
+                f"(target {spec['target']} for {spec['seconds']}s)"
+            )
+
+    total = len(story["story"].split())
+    if not (LONG_TOTAL_MIN <= total <= LONG_TOTAL_MAX):
+        raise ValueError(
+            f"story word count {total} outside {LONG_TOTAL_MIN}-{LONG_TOTAL_MAX} range"
+        )
+
+    if "subscribe" not in str(sections["cta"]).lower():
+        raise ValueError("cta section must contain an explicit 'Subscribe' call-out")
+
+    # The renderer's search terms come from splitting this on commas
+    # (app/services/task.py). A space-separated string collapses to ONE term and
+    # silently yields a video that loops the same few clips for ten minutes.
+    terms = [t.strip() for t in str(story["keywords"]).split(",") if t.strip()]
+    if len(terms) < LONG_MIN_KEYWORD_TERMS:
+        raise ValueError(
+            f"keywords must be >= {LONG_MIN_KEYWORD_TERMS} comma-separated terms, got {len(terms)}"
+        )
+
+    _check_self_contained(story["story"])
 
 
 def _is_model_gone(resp) -> bool:
@@ -254,9 +324,14 @@ def _parse_retry_seconds(resp) -> float:
     return 15.0
 
 
-def pick_theme(state_rows: list) -> str:
+def pick_theme(state_rows: list, variant: str | None = None) -> str:
+    """Least-used theme. Scoped per variant when given, so a long video does not
+    starve the short rotation of a theme (different audiences, independent cycles)."""
+    rows = state_rows
+    if variant is not None:
+        rows = [r for r in rows if (r.get("variant") or "short") == variant]
     counts = {t: 0 for t in THEMES}
-    for r in state_rows[-100:]:
+    for r in rows[-100:]:
         if r.get("theme") in counts:
             counts[r["theme"]] += 1
     return min(counts, key=counts.get)
@@ -265,21 +340,25 @@ def pick_theme(state_rows: list) -> str:
 def main():
     sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 
-    unclaimed = sb.table("story_queue").select("id", count="exact").is_("claimed_at", "null").execute().count
-    print(f"[generate] Unclaimed stories: {unclaimed}")
-    if unclaimed >= QUEUE_TARGET:
+    target = QUEUE_TARGETS["short"]
+    unclaimed = (
+        sb.table("story_queue").select("id", count="exact")
+        .is_("claimed_at", "null").eq("variant", "short").execute().count
+    )
+    print(f"[generate] Unclaimed short stories: {unclaimed}")
+    if unclaimed >= target:
         print("[generate] Queue healthy, nothing to do.")
         return
 
     system_prompt = CHANNEL_BRIEF + AUTOMATION_TAIL
 
-    state_rows = sb.table("story_state").select("theme,hook,fingerprint,curve").execute().data
+    state_rows = sb.table("story_state").select("variant,theme,hook,fingerprint,curve").execute().data
 
     written = 0
     attempts = 0
-    while unclaimed + written < QUEUE_TARGET and attempts < (QUEUE_TARGET - unclaimed) * 6:
+    while unclaimed + written < target and attempts < (target - unclaimed) * 6:
         attempts += 1
-        theme = pick_theme(state_rows)
+        theme = pick_theme(state_rows, variant="short")
         recent = [r for r in state_rows if r.get("theme") == theme][-25:]
         user_prompt = (
             f"Theme lock for this spin-off: \"{theme}\".\n\n"
@@ -291,9 +370,11 @@ def main():
             story = call_groq(system_prompt, user_prompt)
             validate_story(story)
             sb.table("story_queue").insert({
+                "variant": "short",
                 "theme": story["theme"], "title": story["title"], "payload": story,
             }).execute()
-            state_rows.append({"theme": story["theme"], "hook": story["dna"].get("hook"),
+            state_rows.append({"variant": "short", "theme": story["theme"],
+                                "hook": story["dna"].get("hook"),
                                 "fingerprint": story["dna"].get("fingerprint"), "curve": story["curve"]})
             written += 1
             print(f"[generate] Queued: {story['title']} ({story['theme']})")

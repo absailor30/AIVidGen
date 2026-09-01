@@ -1,0 +1,86 @@
+name: Twisty! StoryVault — long-form render & upload
+
+# The 10-minute, 16:9, YouTube-only variant. Deliberately a SEPARATE workflow
+# file rather than an input on story_render.yml: the Cloudflare worker's
+# duplicate guard queries runs per-workflow, so two files give two independent
+# locks. Sharing one would let a multi-hour long render block every Shorts slot
+# for the rest of the day.
+
+on:
+  # Dispatched by the Cloudflare Worker on its own cron slot (see
+  # cloudflare_worker.js), same as the short workflow.
+  workflow_dispatch: {}
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"
+      # Selects the long profile in render_from_supabase.py: 16:9, 1.2x
+      # narration, 8s clips, subtitles off, edge_tts timeout raised, and
+      # Instagram hard-skipped regardless of env.
+      STORY_VARIANT: "long"
+    # A ten-minute video is a different order of magnitude from the ~107s
+    # short, which took 10 minutes to render. Encode cost is not linear in clip
+    # count and TTS retries are not tightly bounded, so this is deliberately
+    # generous rather than tuned — the repo is public, so Actions minutes are
+    # free. GitHub's own ceiling is 360. Revise down once a real run is measured.
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Top up long story queue if running low
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL || secrets.GROQ_MODEL }}
+          GROQ_MAX_TOKENS: ${{ vars.GROQ_MAX_TOKENS || secrets.GROQ_MAX_TOKENS }}
+        shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
+        run: python generate_long_stories.py 2>&1 | tee -a /tmp/pipeline.log
+
+      - name: Render + upload next queued long story
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          GOOGLE_CLIENT_SECRET_JSON: ${{ secrets.GOOGLE_CLIENT_SECRET_JSON }}
+          GOOGLE_TOKEN_PICKLE_B64: ${{ secrets.GOOGLE_TOKEN_PICKLE_B64 }}
+          # Private while the 10-minute timing, 16:9 framing and footage
+          # variety are unproven. Flip to "public" once a few look right.
+          YOUTUBE_PRIVACY: "private"
+          YOUTUBE_CATEGORY_ID: "24"
+          # Separate playlist so long-form does not land in the Shorts playlist.
+          # Falls back to no playlist if the secret is unset.
+          YOUTUBE_PLAYLIST_ID: ${{ secrets.YOUTUBE_PLAYLIST_ID_LONG }}
+          # IG_ACCESS_TOKEN / IG_USER_ID are deliberately NOT passed. The
+          # renderer skips Instagram when they are absent, and the long profile
+          # skips it unconditionally as well — a 16:9 ten-minute video is not a
+          # Reel. Do not copy the short workflow's env block here.
+        shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
+        run: python render_from_supabase.py 2>&1 | tee -a /tmp/pipeline.log
+
+      - name: Notify Telegram on failure
+        if: failure()
+        shell: bash
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          TAIL=$(tail -c 2000 /tmp/pipeline.log 2>/dev/null || true)
+          [ -n "$TAIL" ] || TAIL="(no output captured - the job died before the scripts ran)"
+          MSG=$(printf 'Twisty StoryVault LONG-FORM FAILED (run #%s)\n\n%s\n\n%s\n\nTry /logs for detail.' \
+            "$RUN_NUMBER" "$TAIL" "$RUN_URL")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="$MSG" > /dev/null
