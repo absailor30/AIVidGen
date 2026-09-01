@@ -78,37 +78,51 @@ REQUIRED_KIT_KEYS = ["youtube_title", "youtube_description", "youtube_tags",
 # downstream reads them for that variant (upload_to_youtube uses only these).
 REQUIRED_KIT_KEYS_LONG = ["youtube_title", "youtube_description", "youtube_tags"]
 
-# Per-BEAT word budgets for the long variant, derived from the narration rate:
-# JennyNeural is ~2.85 words/sec at 1.0x, and long-form renders at 1.2x, so
-# ~3.42 words/sec.
+# Per-BEAT word budgets for the long variant, at ~3.42 words/sec (JennyNeural
+# 2.85 w/s x the 1.2x long-form rate).
 #
-# These are per-beat rather than per-section because the first attempt at
-# section-sized targets failed every time: asked for a 718-word chunk covering
-# four beats, the model returned 881, 1177 and 1103 words — consistently ~45%
-# over, and an identical retry just rolls the same dice. A single narrative
-# beat with a ~100-325 word target is something a 27B model can actually hit.
+# Every target is <=165 words, and that ceiling is empirical, not a guess. Two
+# real runs showed a hard cliff in the model's length compliance:
+#   target <=120  ->  84, 99, 113, 98, 56 words. Five for five, first attempt.
+#   target 325    ->  412, 414, 391, 502, 548, 417, 412, 426, 535. Nine of ten
+#                     misses, clustered ~410 — the model's natural "narrative
+#                     block" length, sitting just above a 384 ceiling.
+# Fighting that with retries wasted four attempts a beat. Splitting each body,
+# the truth and the close into halves keeps every request inside the range the
+# model reliably hits, and the halves get "first half"/"second half" briefs so
+# they do not repeat each other.
 #
-# Total targets 565s (~9.4 min), deliberately under the 10-minute ceiling so
-# that even a run of long-ish beats stays near it.
+# `brief` names the logical beat in the plan that this request draws from;
+# `part` positions it within that beat.
 LONG_BEATS = {
-    #            seconds  target  min   max
-    "hook":     {"seconds": 28, "target":  96, "min":  67, "max": 125},
-    "lock_in":  {"seconds": 28, "target":  96, "min":  67, "max": 125},
-    "body_1":   {"seconds": 95, "target": 325, "min": 266, "max": 384},
-    "rehook_1": {"seconds": 18, "target":  62, "min":  43, "max":  81},
-    "body_2":   {"seconds": 95, "target": 325, "min": 266, "max": 384},
-    "rehook_2": {"seconds": 18, "target":  62, "min":  43, "max":  81},
-    "body_3":   {"seconds": 95, "target": 325, "min": 266, "max": 384},
-    "rehook_3": {"seconds": 18, "target":  62, "min":  43, "max":  81},
-    "truth":    {"seconds": 57, "target": 195, "min": 160, "max": 230},
-    "closing":  {"seconds": 85, "target": 291, "min": 239, "max": 343},
-    "cta":      {"seconds": 28, "target":  96, "min":  67, "max": 125},
+    "hook":      {"target":  96, "min":  67, "max": 125, "brief": "hook",     "part": None},
+    "lock_in":   {"target":  96, "min":  67, "max": 125, "brief": "lock_in",  "part": None},
+    "body_1a":   {"target": 163, "min": 114, "max": 212, "brief": "body_1",   "part": "first"},
+    "body_1b":   {"target": 163, "min": 114, "max": 212, "brief": "body_1",   "part": "second"},
+    "rehook_1":  {"target":  62, "min":  43, "max":  81, "brief": "rehook_1", "part": None},
+    "body_2a":   {"target": 163, "min": 114, "max": 212, "brief": "body_2",   "part": "first"},
+    "body_2b":   {"target": 163, "min": 114, "max": 212, "brief": "body_2",   "part": "second"},
+    "rehook_2":  {"target":  62, "min":  43, "max":  81, "brief": "rehook_2", "part": None},
+    "body_3a":   {"target": 163, "min": 114, "max": 212, "brief": "body_3",   "part": "first"},
+    "body_3b":   {"target": 163, "min": 114, "max": 212, "brief": "body_3",   "part": "second"},
+    "rehook_3":  {"target":  62, "min":  43, "max":  81, "brief": "rehook_3", "part": None},
+    "truth_a":   {"target":  98, "min":  69, "max": 127, "brief": "truth",    "part": "first"},
+    "truth_b":   {"target":  97, "min":  68, "max": 126, "brief": "truth",    "part": "second"},
+    "closing_a": {"target": 146, "min": 102, "max": 190, "brief": "closing",  "part": "first"},
+    "closing_b": {"target": 145, "min": 102, "max": 188, "brief": "closing",  "part": "second"},
+    "cta":       {"target":  96, "min":  67, "max": 125, "brief": "cta",      "part": None},
 }
+for _spec in LONG_BEATS.values():
+    _spec["seconds"] = round(_spec["target"] / 3.42)
 BEAT_ORDER = list(LONG_BEATS)
 
-# Per-beat bands alone would allow 7.4-11.4 min; this gate keeps the aggregate
-# sane even when several beats land at opposite ends of their range.
-LONG_TOTAL_MIN, LONG_TOTAL_MAX = 1700, 2250
+# The 11 logical beats the planning call briefs (several map to two requests).
+LOGICAL_BEATS = ["hook", "lock_in", "body_1", "rehook_1", "body_2", "rehook_2",
+                 "body_3", "rehook_3", "truth", "closing", "cta"]
+
+# Targets total 1938 words (~9.4 min), under the 10-minute ceiling. Per-beat
+# bands alone would allow 6.6-12.3 min, so gate the aggregate too.
+LONG_TOTAL_MIN, LONG_TOTAL_MAX = 1650, 2150
 LONG_MIN_KEYWORD_TERMS = 10
 
 AUTOMATION_TAIL = """

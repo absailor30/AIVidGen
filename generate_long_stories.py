@@ -32,6 +32,7 @@ from supabase import create_client
 
 from generate_stories_cloud import (
     BEAT_ORDER,
+    LOGICAL_BEATS,
     LONG_BEATS,
     LONG_MIN_KEYWORD_TERMS,
     LONG_TOTAL_MAX,
@@ -115,7 +116,7 @@ commentary before or after), matching exactly:
   "cooldown_flag": "...",
   "tracking_tag": "[[TWISTY: theme=...; hook=...; fingerprint=...; ending=...]]",
   "beats": {
-    "hook": "1-2 sentences briefing what this beat covers",
+    "hook": "2-3 sentences briefing what happens in this beat",
     "lock_in": "...", "body_1": "...", "rehook_1": "...",
     "body_2": "...", "rehook_2": "...", "body_3": "...", "rehook_3": "...",
     "truth": "...", "closing": "...", "cta": "..."
@@ -175,34 +176,47 @@ def _plan_prompt(theme: str, recent: list) -> tuple[str, str]:
 
 def _beat_prompt(plan: dict, name: str, previous_tail: str, correction: str = "") -> tuple[str, str]:
     spec = LONG_BEATS[name]
-    brief = plan["beats"].get(name, "")
+    logical = spec["brief"]
+    brief = plan["beats"].get(logical, "")
 
     system = (
         f"{LONG_BRIEF}\n\n{STRUCTURE}\n\n"
         f"{BEAT_SCHEMA.replace('<BEAT_NAME>', name)}"
     )
 
+    # Halves of one logical beat need distinct jobs or they restate each other.
+    if spec["part"] == "first":
+        part_note = (
+            f"\nThis is the FIRST HALF of the '{logical}' beat. Set it up and get "
+            f"it moving, but stop before its conclusion — the second half finishes it. "
+            f"Do not resolve it here."
+        )
+    elif spec["part"] == "second":
+        part_note = (
+            f"\nThis is the SECOND HALF of the '{logical}' beat. The first half is "
+            f"immediately above; carry it forward to its conclusion. Do not restate "
+            f"what it already covered."
+        )
+    else:
+        part_note = ""
+
     continuity = (
         f"The story so far ended with:\n...{previous_tail}\n\n"
         f"Continue seamlessly from there. Do not recap it.\n\n"
         if previous_tail else ""
     )
-    # Sentence count alongside the word count: models track sentences far more
-    # reliably than words, so it gives the length instruction a second handle.
     sentences = max(2, round(spec["target"] / 18))
     user = (
         f"Story plan:\n"
         f"{json.dumps({k: v for k, v in plan.items() if k not in ('publishing_kit', 'beats')}, ensure_ascii=False)}\n\n"
         f"{continuity}"
-        f"Write ONLY the \"{name}\" beat.\n"
-        f"Its job: {BEAT_ROLE[name]}\n"
-        f"Planned content: {brief}\n\n"
-        f"LENGTH IS A HARD REQUIREMENT: exactly {spec['target']} words, give or "
-        f"take. It must land between {spec['min']} and {spec['max']} words — "
-        f"roughly {sentences} sentences. This beat is narrated for about "
-        f"{spec['seconds']} seconds and the pacing of the whole video depends "
-        f"on it. Write this beat only; later beats cover the rest of the story, "
-        f"so do not get ahead of yourself.\n"
+        f"Write ONLY this piece of the story.\n"
+        f"Its job: {BEAT_ROLE[logical]}{part_note}\n"
+        f"Planned content for the '{logical}' beat: {brief}\n\n"
+        f"LENGTH IS A HARD REQUIREMENT: about {spec['target']} words, roughly "
+        f"{sentences} sentences. It must land between {spec['min']} and "
+        f"{spec['max']} words. Write this piece only — later pieces cover the "
+        f"rest of the story, so do not get ahead of yourself.\n"
         f"{correction}"
     )
     return system, user
@@ -218,6 +232,9 @@ def generate_long_story(theme: str, recent: list) -> dict:
     for key in ("beats", "keywords", "dna", "publishing_kit"):
         if key not in plan:
             raise ValueError(f"plan missing '{key}'")
+    missing_briefs = [b for b in LOGICAL_BEATS if not plan["beats"].get(b)]
+    if missing_briefs:
+        raise ValueError(f"plan is missing beat briefs: {missing_briefs}")
     print(f"[long] Plan: {plan.get('title')} ({plan.get('theme')})")
 
     terms = [t.strip() for t in str(plan["keywords"]).split(",") if t.strip()]
