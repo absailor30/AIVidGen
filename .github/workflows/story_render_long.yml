@@ -56,9 +56,9 @@ jobs:
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           GOOGLE_CLIENT_SECRET_JSON: ${{ secrets.GOOGLE_CLIENT_SECRET_JSON }}
           GOOGLE_TOKEN_PICKLE_B64: ${{ secrets.GOOGLE_TOKEN_PICKLE_B64 }}
-          # Private while the 10-minute timing, 16:9 framing and footage
-          # variety are unproven. Flip to "public" once a few look right.
-          YOUTUBE_PRIVACY: "private"
+          # Public: run #3 confirmed the timing (553s narration, 9.2 min),
+          # the 16:9 framing and the footage variety on a real video.
+          YOUTUBE_PRIVACY: "public"
           YOUTUBE_CATEGORY_ID: "24"
           # Separate playlist so long-form does not land in the Shorts playlist.
           # Falls back to no playlist if the secret is unset.
