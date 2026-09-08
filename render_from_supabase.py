@@ -121,6 +121,32 @@ def _profile(variant: str) -> dict:
         )
 
 
+def sb_retry(label: str, fn, attempts: int = 4):
+    """Run a Supabase call, retrying transient infrastructure failures.
+
+    Supabase sits behind Cloudflare, and a brief origin outage surfaces as a
+    Cloudflare 5xx HTML page wrapped in a postgrest APIError. Run #231 hit one
+    on the very LAST write of the job — the story_queue bookkeeping update —
+    after the video had already rendered and published to YouTube and
+    Instagram. The run was reported as a failure and the queue row was left
+    claimed-but-unrendered, even though nothing about the post was wrong.
+    A few seconds of backoff turns that class of blip into a non-event.
+    """
+    delay = 2.0
+    for attempt in range(attempts):
+        try:
+            return fn()
+        except Exception as e:
+            if attempt == attempts - 1:
+                raise
+            detail = str(e)
+            # The 5xx bodies are full HTML pages; one line is enough to see it.
+            print(f"[supabase] {label} failed ({detail[:160]}), "
+                  f"retrying in {delay:.0f}s ({attempt + 1}/{attempts - 1})")
+            time.sleep(delay)
+            delay *= 2
+
+
 def supabase_client():
     url = os.environ["SUPABASE_URL"]
     key = os.environ["SUPABASE_SERVICE_KEY"]
@@ -134,11 +160,14 @@ def claim_next_story(sb, theme: str | None = None, variant: str = "short"):
     )
     if theme:
         query = query.eq("theme", theme)
-    rows = query.execute().data
+    rows = sb_retry("claim query", lambda: query.execute()).data
     if not rows:
         return None
     row = rows[0]
-    sb.table("story_queue").update({"claimed_at": "now()"}).eq("id", row["id"]).execute()
+    sb_retry(
+        "claim update",
+        lambda: sb.table("story_queue").update({"claimed_at": "now()"}).eq("id", row["id"]).execute(),
+    )
     return row
 
 
@@ -245,6 +274,16 @@ def upload_to_youtube(video_path: str, kit: dict) -> str | None:
             "containsSyntheticMedia": True,
         },
     }
+
+    # Scheduled publishing. YouTube only honours publishAt on a video that is
+    # uploaded private, and rejects the insert outright if privacyStatus is
+    # anything else -- so override it here rather than making the caller
+    # remember to set both. The video goes live by itself at the given time.
+    publish_at = (os.environ.get("YOUTUBE_PUBLISH_AT") or "").strip()
+    if publish_at:
+        body["status"]["publishAt"] = publish_at
+        body["status"]["privacyStatus"] = "private"
+        print(f"[render] Scheduling publish for {publish_at} (uploading private).")
     media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
     response = None
@@ -387,7 +426,12 @@ def main():
     video_path = render_video(story, variant)
     if not video_path:
         # Release the claim so the next run retries this story instead of leaving it stuck.
-        sb.table("story_queue").update({"error": "render failed", "claimed_at": None}).eq("id", row["id"]).execute()
+        sb_retry(
+            "release claim (render failed)",
+            lambda: sb.table("story_queue")
+            .update({"error": "render failed", "claimed_at": None})
+            .eq("id", row["id"]).execute(),
+        )
         sys.exit(1)
 
     youtube_id = None
@@ -400,9 +444,12 @@ def main():
         # run retries this story instead of silently marking it "rendered"
         # with no video ever having gone live, and fail the job so the
         # Telegram failure alert actually fires instead of a false-green run.
-        sb.table("story_queue").update(
-            {"error": f"youtube upload failed: {e}", "claimed_at": None}
-        ).eq("id", row["id"]).execute()
+        sb_retry(
+            "release claim (youtube failed)",
+            lambda: sb.table("story_queue")
+            .update({"error": f"youtube upload failed: {e}", "claimed_at": None})
+            .eq("id", row["id"]).execute(),
+        )
         sys.exit(1)
 
     instagram_id = None
@@ -432,7 +479,11 @@ def main():
         print("[main] Skipping Instagram — IG_ACCESS_TOKEN / IG_USER_ID not set.")
 
     dna = story["dna"]
-    sb.table("story_state").insert({
+    # Everything below is bookkeeping: the video is already live on YouTube.
+    # A Supabase blip here used to fail the whole run with a raw traceback
+    # (run #231), so retry first and, if it still will not land, exit with a
+    # message that says plainly what did and did not happen.
+    state_row = {
         "variant": variant,
         "theme": story["theme"],
         "title": story["title"],
@@ -447,11 +498,28 @@ def main():
         "tracking_tag": story["tracking_tag"],
         "youtube_id": youtube_id,
         "instagram_id": instagram_id,
-    }).execute()
-    sb.table("story_queue").update({
+    }
+    queue_row = {
         "rendered": True, "youtube_id": youtube_id, "instagram_id": instagram_id,
         "error": f"instagram: {instagram_error}" if instagram_error else None,
-    }).eq("id", row["id"]).execute()
+    }
+    try:
+        sb_retry(
+            "record story_state",
+            lambda: sb.table("story_state").insert(state_row).execute(),
+        )
+        sb_retry(
+            "mark queue row rendered",
+            lambda: sb.table("story_queue").update(queue_row)
+            .eq("id", row["id"]).execute(),
+        )
+    except Exception as e:
+        raise SystemExit(
+            f"[main] Video is LIVE on YouTube (id {youtube_id}) — nothing is wrong "
+            f"with the post. Only the Supabase bookkeeping write failed after "
+            f"retries: {e}\n[main] Queue row {row['id']} is left claimed and not "
+            f"marked rendered; clear its claimed_at or set rendered manually."
+        )
 
     if instagram_error:
         # State is recorded above, so this story will not be rendered or
