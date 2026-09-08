@@ -274,6 +274,16 @@ def upload_to_youtube(video_path: str, kit: dict) -> str | None:
             "containsSyntheticMedia": True,
         },
     }
+
+    # Scheduled publishing. YouTube only honours publishAt on a video that is
+    # uploaded private, and rejects the insert outright if privacyStatus is
+    # anything else -- so override it here rather than making the caller
+    # remember to set both. The video goes live by itself at the given time.
+    publish_at = (os.environ.get("YOUTUBE_PUBLISH_AT") or "").strip()
+    if publish_at:
+        body["status"]["publishAt"] = publish_at
+        body["status"]["privacyStatus"] = "private"
+        print(f"[render] Scheduling publish for {publish_at} (uploading private).")
     media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
     response = None

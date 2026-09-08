@@ -9,7 +9,16 @@ name: Twisty! StoryVault — long-form render & upload
 on:
   # Dispatched by the Cloudflare Worker on its own cron slot (see
   # cloudflare_worker.js), same as the short workflow.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      publish_at:
+        description: >-
+          Optional RFC3339 UTC timestamp to schedule the video to go public,
+          e.g. 2026-09-08T14:30:00Z. Leave blank to publish immediately.
+          YouTube requires a scheduled video to be uploaded private, which
+          the renderer handles on its own.
+        required: false
+        default: ""
 
 jobs:
   render:
@@ -59,6 +68,9 @@ jobs:
           # Public: run #3 confirmed the timing (553s narration, 9.2 min),
           # the 16:9 framing and the footage variety on a real video.
           YOUTUBE_PRIVACY: "public"
+          # When set, the renderer uploads private and hands YouTube this
+          # timestamp; the video flips public on its own at that moment.
+          YOUTUBE_PUBLISH_AT: ${{ inputs.publish_at }}
           YOUTUBE_CATEGORY_ID: "24"
           # Separate playlist so long-form does not land in the Shorts playlist.
           # Falls back to no playlist if the secret is unset.
