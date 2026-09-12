@@ -30,6 +30,7 @@ import pickle
 import random
 import sys
 import time
+from datetime import datetime, timezone
 
 import requests
 from supabase import create_client
@@ -368,9 +369,33 @@ def _ig_check(resp, step: str):
     raise RuntimeError(f"Instagram {step} returned HTTP {resp.status_code}: {body}")
 
 
-def upload_to_instagram(video_url: str, kit: dict) -> str | None:
+def resolve_ig_token(sb) -> str | None:
+    """The live Instagram token: the auto-refreshed one if it is still valid.
+
+    refresh_ig_token.py keeps a rolling 60-day token in Supabase, because a
+    GitHub secret cannot be rewritten by a workflow without a repo-wide
+    secrets-write PAT. The IG_ACCESS_TOKEN env var remains the seed for the
+    first refresh and the way back in if the stored token ever lapses, so it
+    is used whenever the stored one is missing or past its expiry.
+    """
+    env_token = (os.environ.get("IG_ACCESS_TOKEN") or "").strip()
+    try:
+        rows = sb.table("ig_token").select("access_token,expires_at").eq("id", 1).execute().data
+    except Exception as e:
+        # Never let token bookkeeping stop a post that the env var could serve.
+        print(f"[main] Could not read stored Instagram token ({e}); using env.")
+        return env_token or None
+
+    if rows:
+        expires_at = datetime.fromisoformat(rows[0]["expires_at"].replace("Z", "+00:00"))
+        if expires_at > datetime.now(timezone.utc):
+            return rows[0]["access_token"]
+        print(f"[main] Stored Instagram token expired {expires_at:%Y-%m-%d}; using env.")
+    return env_token or None
+
+
+def upload_to_instagram(video_url: str, kit: dict, token: str) -> str | None:
     """Publishes a Reel via the Instagram API (Instagram Login) using a temporary signed URL."""
-    token = os.environ["IG_ACCESS_TOKEN"]
     ig_user_id = os.environ["IG_USER_ID"]
 
     caption = f"{kit['instagram_caption']}\n\n" + " ".join(
@@ -475,11 +500,11 @@ def main():
         # this makes a 16:9 ten-minute video un-postable to Reels even if a
         # future edit copies the short workflow's env block wholesale.
         print(f"[main] Skipping Instagram — {variant} variant is YouTube-only.")
-    elif os.environ.get("IG_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
+    elif (ig_token := resolve_ig_token(sb)) and os.environ.get("IG_USER_ID"):
         storage_path = None
         try:
             storage_path, signed_url = get_signed_video_url(sb, video_path, row["id"])
-            instagram_id = upload_to_instagram(signed_url, story["publishing_kit"])
+            instagram_id = upload_to_instagram(signed_url, story["publishing_kit"], ig_token)
             print(f"[main] Posted to Instagram: media id {instagram_id}")
         except Exception as e:
             # Remembered, not swallowed. The state write below still happens so
@@ -492,7 +517,7 @@ def main():
             if storage_path:
                 delete_from_storage(sb, storage_path)
     else:
-        print("[main] Skipping Instagram — IG_ACCESS_TOKEN / IG_USER_ID not set.")
+        print("[main] Skipping Instagram — no usable token, or IG_USER_ID not set.")
 
     dna = story["dna"]
     # Everything below is bookkeeping: the video is already live on YouTube.

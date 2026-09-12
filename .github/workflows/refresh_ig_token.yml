@@ -1,0 +1,58 @@
+name: Twisty! StoryVault — refresh Instagram token
+
+# Instagram long-lived tokens last 60 days, and Meta will NOT refresh one that
+# has already expired -- recovery then means generating a new token by hand in
+# the app dashboard. That is what happened on 2026-09-11, and every Reel failed
+# for a day before it was noticed.
+#
+# So this runs weekly, not monthly and not near the deadline: roughly 8 attempts
+# before a token could lapse, and every failure has weeks of slack behind it.
+# Each successful refresh resets the clock to a full 60 days.
+
+on:
+  schedule:
+    # 01:00 UTC Mondays (06:30 IST) — off-peak, and clear of every render slot.
+    - cron: "0 1 * * 1"
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Refresh token
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          # Seed for the very first run, and the way back in if the stored
+          # token ever lapses. Not rewritten by this job -- the refreshed token
+          # lives in Supabase, since a workflow cannot update a GitHub secret
+          # without a repo-wide secrets-write PAT.
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
+        run: python refresh_ig_token.py 2>&1 | tee -a /tmp/ig_token.log
+
+      - name: Notify Telegram on failure
+        if: failure()
+        shell: bash
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TAIL=$(tail -c 1500 /tmp/ig_token.log 2>/dev/null || true)
+          [ -n "$TAIL" ] || TAIL="(no output captured - the job died before the script ran)"
+          MSG=$(printf 'Twisty StoryVault: INSTAGRAM TOKEN REFRESH FAILED\n\n%s\n\nThe token still works until it expires, but it can NOT be refreshed once it does - fix this before then or Instagram posting stops.\n\n%s' \
+            "$TAIL" "$RUN_URL")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="$MSG" > /dev/null
