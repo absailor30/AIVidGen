@@ -352,6 +352,22 @@ def delete_from_storage(sb, storage_path: str):
         print(f"[instagram] Cleanup warning (non-fatal): {e}")
 
 
+def _ig_check(resp, step: str):
+    """Raise with Meta's own explanation attached.
+
+    requests' raise_for_status() reports only "400 Client Error", which is the
+    same message for an expired token, a video URL Instagram could not fetch,
+    and a rejected caption. Meta puts the actual reason in the response body,
+    so a failed Instagram post used to reach Telegram as an unactionable bare
+    400. Include the body -- it names the error, its subcode, and usually the
+    fix.
+    """
+    if resp.ok:
+        return resp
+    body = (resp.text or "").strip()[:500]
+    raise RuntimeError(f"Instagram {step} returned HTTP {resp.status_code}: {body}")
+
+
 def upload_to_instagram(video_url: str, kit: dict) -> str | None:
     """Publishes a Reel via the Instagram API (Instagram Login) using a temporary signed URL."""
     token = os.environ["IG_ACCESS_TOKEN"]
@@ -371,7 +387,7 @@ def upload_to_instagram(video_url: str, kit: dict) -> str | None:
         },
         timeout=60,
     )
-    create_resp.raise_for_status()
+    _ig_check(create_resp, "media container creation")
     creation_id = create_resp.json()["id"]
 
     # Poll until Instagram finishes downloading/processing the video
@@ -382,7 +398,7 @@ def upload_to_instagram(video_url: str, kit: dict) -> str | None:
             params={"fields": "status_code", "access_token": token},
             timeout=30,
         )
-        status_resp.raise_for_status()
+        _ig_check(status_resp, "container status poll")
         status = status_resp.json().get("status_code")
         if status == "FINISHED":
             break
@@ -397,7 +413,7 @@ def upload_to_instagram(video_url: str, kit: dict) -> str | None:
         data={"creation_id": creation_id, "access_token": token},
         timeout=60,
     )
-    publish_resp.raise_for_status()
+    _ig_check(publish_resp, "media publish")
     return publish_resp.json().get("id")
 
 
