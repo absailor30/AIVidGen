@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.11-slim-bullseye
+FROM python:3.11-slim-bookworm
 
 # Set the working directory in the container
 WORKDIR /MoneyPrinterTurbo
@@ -15,46 +15,54 @@ ARG DOCKER_BUILD_MIRROR=china
 ARG PIP_USE_OFFICIAL=0
 
 # Install system dependencies with retry logic
-RUN if [ "$DOCKER_BUILD_MIRROR" = "china" ]; then \
-        echo "deb http://mirrors.aliyun.com/debian bullseye main" > /etc/apt/sources.list && \
-        echo "deb http://mirrors.aliyun.com/debian-security bullseye-security main" >> /etc/apt/sources.list; \
+# The previous version of this step ended each attempt with
+# `... && break || echo "retrying"`, so when every attempt failed the `echo`
+# still returned 0 and the whole RUN succeeded. imagemagick was then absent,
+# and the build died further down on a sed against a policy file that had
+# never been created -- an error that pointed nowhere near the real cause.
+# Track success explicitly and fail the build where the failure happens.
+RUN set -eu; \
+    apt_install() { \
+        apt-get update && apt-get install -y --no-install-recommends \
+            git imagemagick ffmpeg; \
+    }; \
+    if [ "$DOCKER_BUILD_MIRROR" = "china" ]; then \
+        echo "deb http://mirrors.aliyun.com/debian bookworm main" > /etc/apt/sources.list; \
+        echo "deb http://mirrors.aliyun.com/debian-security bookworm-security main" >> /etc/apt/sources.list; \
     else \
         echo "Using default Debian mirrors"; \
-    fi && \
-    ( \
-        for i in 1 2 3; do \
-            echo "Attempt $i: installing system dependencies"; \
-            apt-get update && apt-get install -y --no-install-recommends \
-                git \
-                imagemagick \
-                ffmpeg && break || \
-            echo "Attempt $i failed, retrying..."; \
-            if [ "$DOCKER_BUILD_MIRROR" = "china" ] && [ $i -eq 3 ]; then \
-                echo "Aliyun mirror failed, switching to Tsinghua mirror"; \
-                sed -i 's/mirrors.aliyun.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list && \
-                sed -i 's/mirrors.aliyun.com\/debian-security/mirrors.tuna.tsinghua.edu.cn\/debian-security/g' /etc/apt/sources.list && \
-                ( \
-                    apt-get update && apt-get install -y --no-install-recommends \
-                        git \
-                        imagemagick \
-                        ffmpeg || \
-                    ( \
-                        echo "Tsinghua mirror failed, switching to default Debian mirror"; \
-                        sed -i 's/mirrors.tuna.tsinghua.edu.cn/deb.debian.org/g' /etc/apt/sources.list && \
-                        sed -i 's/mirrors.tuna.tsinghua.edu.cn\/debian-security/security.debian.org/g' /etc/apt/sources.list; \
-                        apt-get update && apt-get install -y --no-install-recommends \
-                            git \
-                            imagemagick \
-                            ffmpeg; \
-                    ); \
-                ); \
-            fi; \
-            sleep 5; \
-        done \
-    ) && rm -rf /var/lib/apt/lists/*
+    fi; \
+    installed=0; \
+    for i in 1 2 3; do \
+        echo "Attempt $i: installing system dependencies"; \
+        if apt_install; then installed=1; break; fi; \
+        echo "Attempt $i failed."; \
+        if [ "$DOCKER_BUILD_MIRROR" = "china" ] && [ "$i" -eq 1 ]; then \
+            echo "Switching to Tsinghua mirror"; \
+            sed -i 's/mirrors.aliyun.com/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list; \
+        elif [ "$DOCKER_BUILD_MIRROR" = "china" ] && [ "$i" -eq 2 ]; then \
+            echo "Switching to default Debian mirrors"; \
+            echo "deb http://deb.debian.org/debian bookworm main" > /etc/apt/sources.list; \
+            echo "deb http://security.debian.org/debian-security bookworm-security main" >> /etc/apt/sources.list; \
+        fi; \
+        sleep 5; \
+    done; \
+    if [ "$installed" -ne 1 ]; then \
+        echo "FATAL: could not install git/imagemagick/ffmpeg after 3 attempts." >&2; \
+        exit 1; \
+    fi; \
+    rm -rf /var/lib/apt/lists/*
 
-# Fix security policy for ImageMagick
-RUN sed -i '/<policy domain="path" rights="none" pattern="@\*"/d' /etc/ImageMagick-6/policy.xml
+# Fix security policy for ImageMagick (MoviePy writes text via @-files, which
+# the stock policy blocks). Debian 12 still ships ImageMagick 6; if a future
+# base image moves to 7 this path changes, so say so rather than failing on a
+# bare "sed: exit 2".
+RUN policy=/etc/ImageMagick-6/policy.xml; \
+    if [ ! -f "$policy" ]; then \
+        echo "FATAL: $policy not found -- is imagemagick installed, and still v6?" >&2; \
+        exit 1; \
+    fi; \
+    sed -i '/<policy domain="path" rights="none" pattern="@\*"/d' "$policy"
 
 # Copy only the requirements.txt first to leverage Docker cache
 COPY requirements.txt ./

@@ -17,7 +17,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE_NAME: ghcr.io/harry0703/moneyprinterturbo
+  # This repo is a fork of harry0703/MoneyPrinterTurbo, and the workflow came
+  # with it still pointing at the upstream author's GHCR namespace. This repo's
+  # GITHUB_TOKEN can only publish under its own owner, so every push here was
+  # denied. Must stay lowercase -- GHCR rejects uppercase path segments, so
+  # ${{ github.repository }} ("absailor30/AIVidGen") cannot be used directly.
+  IMAGE_NAME: ghcr.io/absailor30/aividgen
 
 jobs:
   publish:
