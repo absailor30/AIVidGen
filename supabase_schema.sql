@@ -95,3 +95,27 @@ create table if not exists story_metrics (
 );
 
 create index if not exists story_metrics_youtube_idx on story_metrics (youtube_id);
+
+-- ---------------------------------------------------------------------------
+-- ig_token: the live Instagram access token, kept rolling by refresh_ig_token.py.
+--
+-- Instagram long-lived tokens last 60 days and CANNOT be refreshed once expired
+-- -- recovery means minting a new one by hand in the Meta dashboard, which is
+-- what 2026-09-11 cost. A weekly job refreshes this well ahead of the deadline.
+--
+-- It lives here rather than in the IG_ACCESS_TOKEN GitHub secret because a
+-- workflow cannot rewrite a repo secret without a PAT carrying repo-wide
+-- "Secrets: read and write" -- a much heavier credential than this job needs.
+-- The env var remains the seed for the first refresh and the fallback if the
+-- stored token ever lapses.
+--
+-- Single row by construction; RLS is on, so only the service key reaches it.
+-- ---------------------------------------------------------------------------
+create table if not exists ig_token (
+  id int primary key default 1,
+  access_token text not null,
+  expires_at timestamptz not null,
+  refreshed_at timestamptz not null default now(),
+  constraint ig_token_singleton check (id = 1)
+);
+alter table ig_token enable row level security;
