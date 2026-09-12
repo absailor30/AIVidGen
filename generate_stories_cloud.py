@@ -59,15 +59,36 @@ promise: "Every story has another side." Your stories are emotional, grounded,
 realistic family/relationship dramas that hook instantly and end with a
 satisfying, karmic vindication where the narrator comes out on top."""
 
-THEMES = [
-    "Family Inheritance",
-    "Career Sabotage / Workplace Betrayal",
-    "Marriage & Infidelity",
-    "Wedding & Family Entitlement",
-    "Sibling Rivalry & Favoritism",
-    "In-Law Conflicts",
-    "Friendship Betrayal & Glow-Up",
-]
+# Weighted by measured audience retention, not by taste. The weights come from
+# the first story_metrics snapshot (152 videos, average view percentage, which
+# unlike view count is comparable across videos of different ages):
+#
+#   Sibling Rivalry     78.4%      Wedding & Entitlement  67.0%
+#   In-Law Conflicts    74.9%      Marriage & Infidelity  60.4%
+#   Family Inheritance  73.1%      Friendship Betrayal    56.2%
+#   Career Sabotage     67.7%
+#
+# Production had been almost exactly inverted against this: Marriage &
+# Infidelity was the most-produced theme and second-worst on retention, while
+# the two best were among the least produced. That is a direct consequence of
+# pick_theme picking the *least used* theme, which drives every theme toward an
+# equal share regardless of how it performs.
+#
+# A weight is a relative share of the queue, not a ranking -- weight 3 gets
+# roughly three times the slots of weight 1. Nothing is dropped outright: a
+# theme with a low weight still appears often enough to keep earning new data,
+# and can be promoted when it does.
+THEME_WEIGHTS = {
+    "Sibling Rivalry & Favoritism": 3,
+    "In-Law Conflicts": 3,
+    "Family Inheritance": 2,
+    "Career Sabotage / Workplace Betrayal": 2,
+    "Wedding & Family Entitlement": 2,
+    "Marriage & Infidelity": 1,
+    "Friendship Betrayal & Glow-Up": 1,
+}
+
+THEMES = list(THEME_WEIGHTS)
 
 REQUIRED_KEYS = ["theme", "title", "story", "keywords", "dna", "curve",
                  "variables_changed", "score", "cooldown_flag", "tracking_tag", "publishing_kit"]
@@ -156,6 +177,14 @@ HARD RULES:
 - End with a short spoken follow-CTA woven naturally into the closing line
   (e.g. "Follow for the next one.").
 - Keep it grounded and realistic — no over-the-top or implausible twists.
+- OPENING CLASS: start with an incoming event or a moment of recognition — an
+  unexpected call or message that arrives, or the narrator suddenly realising
+  what something means. Measured retention by opening class, over 78 tagged
+  videos: unexpected-call 83.9%, recognition 74.0%, observed-behaviour 67.3%,
+  found-object 60.9%, overheard-sentence 60.2%. Do NOT open on the discovery of
+  a physical object (a letter, a receipt, a photo, a document) — that is the
+  channel's most overused opening and among its worst-retaining. An object may
+  still appear later as evidence; it must not be the first beat.
 
 Respond with ONLY a single JSON object (no markdown fences, no commentary before or
 after), matching exactly:
@@ -169,7 +198,7 @@ after), matching exactly:
   "variables_changed": ["...", "..."],
   "score": 88,
   "cooldown_flag": "...",
-  "tracking_tag": "[[TWISTY: theme=...; hook=...; fingerprint=...; ending=...]]",
+  "tracking_tag": "[[TWISTY: theme=<the locked theme, copied exactly>; hook=<opening class: Unexpected Call | Recognition | Behavior | Object | Sentence>; fingerprint=...; ending=...]]",
   "publishing_kit": {
     "youtube_title": "...", "youtube_description": "... teaser + tracking_tag on its own line + hashtags + 'Follow for the next one.' ...",
     "youtube_tags": ["...", "..."],
@@ -203,6 +232,13 @@ def validate_story(story: dict, variant: str = "short"):
         raise ValueError("variables_changed needs >= 6 items")
     if story["score"] < 85:
         raise ValueError(f"score {story['score']} below 85")
+    # The prompt locks a theme, but the model has quietly invented its own
+    # before ("Monogamy & Financial Betrayal", 2026-09-11). An off-list theme
+    # silently breaks the rotation -- pick_theme cannot count it, so it neither
+    # gets scheduled nor blocks anything -- and it fragments the per-theme
+    # performance data that now steers the weights.
+    if story["theme"] not in THEMES:
+        raise ValueError(f"theme {story['theme']!r} is not one of THEMES")
 
     if variant == "long":
         return _validate_long(story)
@@ -366,7 +402,16 @@ def pick_theme(state_rows: list, variant: str | None = None) -> str:
     for r in rows[-100:]:
         if r.get("theme") in counts:
             counts[r["theme"]] += 1
-    return min(counts, key=counts.get)
+
+    # Pick whichever theme is furthest below the share its weight entitles it
+    # to. Equal weights reduce to the old least-used behaviour, and because a
+    # pick immediately shrinks that theme's deficit, consecutive calls still
+    # interleave themes rather than emitting a run of the same one -- which
+    # STORY_ENGINE_BIBLE asks for explicitly (a batch is a tracking unit, not a
+    # publishing schedule).
+    total = sum(counts.values()) + 1  # +1: the story this call is about to make
+    weight_sum = sum(THEME_WEIGHTS.values())
+    return max(THEMES, key=lambda t: THEME_WEIGHTS[t] / weight_sum * total - counts[t])
 
 
 def main():
