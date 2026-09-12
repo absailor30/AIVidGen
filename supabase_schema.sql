@@ -62,3 +62,36 @@ create index if not exists story_queue_unclaimed_idx
 -- drop index if exists story_queue_unclaimed_idx;
 -- create index if not exists story_queue_unclaimed_idx
 --     on story_queue (variant, id) where claimed_at is null;
+
+-- ---------------------------------------------------------------------------
+-- story_metrics: performance snapshots, one row per video per collection day.
+--
+-- story_state records what we published; this records how it did. The two join
+-- on youtube_id, which is what makes the STORY_ENGINE_BIBLE batch analysis a
+-- query rather than an afternoon in YouTube Studio -- every DNA dimension the
+-- bible wants to sort by (hook class, ending type, theme) is already a column
+-- on story_state.
+--
+-- Snapshots rather than a single mutable row: a Short's view count keeps moving
+-- for weeks, so "views on day 3" and "views on day 30" are different questions
+-- and both are worth answering. Re-running collection on the same day updates
+-- that day's row instead of adding a duplicate.
+-- ---------------------------------------------------------------------------
+create table if not exists story_metrics (
+  id bigserial primary key,
+  youtube_id text not null,
+  collected_on date not null default current_date,
+  -- Data API (public counters)
+  views bigint,
+  likes bigint,
+  comments bigint,
+  -- Analytics API (owner-only; null until the yt-analytics.readonly scope is
+  -- granted, so the table is useful before the token is re-consented)
+  estimated_minutes_watched numeric,
+  average_view_duration_seconds numeric,
+  average_view_percentage numeric,
+  collected_at timestamptz not null default now(),
+  unique (youtube_id, collected_on)
+);
+
+create index if not exists story_metrics_youtube_idx on story_metrics (youtube_id);

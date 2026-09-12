@@ -7,8 +7,21 @@ name: Twisty! StoryVault — long-form render & upload
 # for the rest of the day.
 
 on:
-  # Dispatched by the Cloudflare Worker on its own cron slot (see
-  # cloudflare_worker.js), same as the short workflow.
+  schedule:
+    # 21:30 UTC = 03:00 IST daily. This is the slot the Cloudflare Worker was
+    # written to dispatch, but that Worker has never been redeployed, so the
+    # long lane had no automation at all and every long video so far has been
+    # triggered by hand.
+    #
+    # IMPORTANT: if the Worker is ever deployed with its LONG_CRONS entry
+    # intact, remove this block or the lane fires twice a day and posts two
+    # ten-minute videos. One scheduler at a time.
+    #
+    # 03:00 IST is deliberately off-peak: a long render takes ~45 minutes and
+    # must not overlap a Shorts slot.
+    - cron: "30 21 * * *"
+
+  # Also dispatchable by hand, and by the Cloudflare Worker if it is deployed.
   workflow_dispatch:
     inputs:
       publish_at:

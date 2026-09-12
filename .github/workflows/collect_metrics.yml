@@ -1,0 +1,52 @@
+name: Twisty! StoryVault — collect performance metrics
+
+# Daily snapshot of how every published video is doing, written to
+# story_metrics. Unlike the render workflows this one is scheduled by GitHub
+# directly rather than by the Cloudflare Worker: there is no duplicate-post
+# risk, a missed day costs nothing, and it keeps the Worker out of the loop.
+
+on:
+  schedule:
+    # 02:30 UTC = 08:00 IST, after the day's first Shorts slot. Cron here is
+    # best-effort and can run late under load, which is fine for a snapshot.
+    - cron: "30 2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Collect metrics
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GOOGLE_TOKEN_PICKLE_B64: ${{ secrets.GOOGLE_TOKEN_PICKLE_B64 }}
+        shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
+        run: python collect_metrics.py 2>&1 | tee -a /tmp/metrics.log
+
+      - name: Notify Telegram on failure
+        if: failure()
+        shell: bash
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          TAIL=$(tail -c 2000 /tmp/metrics.log 2>/dev/null || true)
+          [ -n "$TAIL" ] || TAIL="(no output captured - the job died before the script ran)"
+          MSG=$(printf 'Twisty StoryVault METRICS FAILED (run #%s)\n\n%s\n\n%s' \
+            "$RUN_NUMBER" "$TAIL" "$RUN_URL")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="$MSG" > /dev/null
