@@ -7,14 +7,25 @@ name: Twisty! StoryVault — long-form render & upload
 # for the rest of the day.
 
 on:
-  # No schedule block here on purpose. The Cloudflare Worker now owns the
-  # long-form slot: its LONG_CRONS set contains "30 21 * * *" (03:00 IST,
-  # off-peak so a ~45-minute render cannot overlap a Shorts slot), and
-  # scheduled() routes that cron to this workflow. A schedule: trigger here as
-  # well would fire the lane twice and post two ten-minute videos a day.
-  #
-  # If the Worker is ever rolled back to a version without that routing, put
-  # the cron back here -- but never run both at once.
+  schedule:
+    # 21:30 UTC = 03:00 IST, off-peak so a ~45-minute render cannot overlap a
+    # Shorts slot.
+    #
+    # The Cloudflare Worker was given this slot when it was redeployed with
+    # event.cron routing, and this block was removed to avoid double-firing.
+    # On the first night it owned the slot, 2026-09-12, it dispatched NOTHING:
+    # no long run, and no short run either, so it was not a routing mistake.
+    # The Worker's other four crons fired normally that day and the next, and
+    # there were no stuck runs for its duplicate guard to trip over, so the
+    # cause is still unexplained. GitHub's cron is the less punctual scheduler
+    # -- the metrics job ran 5 hours late the same morning -- but for one daily
+    # video, late beats never.
+    #
+    # DELETE the Worker's "30 21 * * *" cron trigger in the Cloudflare
+    # dashboard. If it ever starts working while this block exists, the lane
+    # fires twice and posts two ten-minute videos a day.
+    - cron: "30 21 * * *"
+
   workflow_dispatch:
     inputs:
       publish_at:
