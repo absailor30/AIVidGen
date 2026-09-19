@@ -47,12 +47,20 @@ from generate_stories_cloud import (
 VARIANT = "long"
 TARGET_DURATION_SECONDS = 600
 
-# One story per run. Five calls plus retries is already a few minutes against
-# Groq's free-tier rate limiting; batching would spend the whole job on
-# generation and leave nothing for the render.
-STORIES_PER_RUN = 1
+# Two stories per run, and the loop stops the moment the queue reaches target,
+# so this only ever costs two stories' worth of calls while the buffer is
+# rebuilding. One per run could never grow the buffer at all: the render lane
+# consumes one a day, so generation matched it exactly and the queue sat at
+# whatever depth it happened to be -- which on run #14 was zero.
+#
+# This is affordable now only because generation moved to its own scheduled
+# job (story_generate_long.yml) hours ahead of the render. Do not raise it
+# back inside a render workflow.
+STORIES_PER_RUN = 2
 MAX_BEAT_ATTEMPTS = 4       # per beat, with corrective feedback between tries
-MAX_STORY_ATTEMPTS = 2      # whole-story restarts
+# Three whole-story restarts, not two. A restart costs 17 Groq calls, but the
+# alternative when all of them fail is a day with no long video at all.
+MAX_STORY_ATTEMPTS = 3      # whole-story restarts
 
 LONG_BRIEF = """You are the head writer for "Twisty! StoryVault", a faceless
 first-person storytelling channel. Brand promise: "Every story has another

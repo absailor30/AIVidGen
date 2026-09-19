@@ -45,12 +45,25 @@ _active_model = None
 # the GROQ_MAX_TOKENS repo variable if stories start getting clipped again.
 MAX_TOKENS = int(os.environ.get("GROQ_MAX_TOKENS") or 4000)
 
-# How deep to keep each variant's queue. Long stories cost ~5 Groq calls each,
-# so a shallower buffer keeps a single run from spending its whole budget there.
+# Groq 429 backoff. The old values -- 4 attempts capped at 30s, falling back to
+# 15s when Groq sends no reset header -- gave up after ~45 seconds, which is
+# nothing against a per-minute token cap that resets in 60. Six attempts at up
+# to 120s rides out a minute-window limit; a daily quota will still exhaust
+# these, which is exactly what the body logged on each retry is there to tell
+# apart. Worst case is ~12 minutes of waiting, well inside every job timeout.
+GROQ_429_ATTEMPTS = 6
+MAX_RETRY_WAIT = 120.0
+
+# How deep to keep each variant's queue.
 # "illustrated" queues the same stories as "short" -- only the backdrop
 # differs at render time -- but needs its own queue so the two lanes never
 # claim each other's rows.
-QUEUE_TARGETS = {"short": 4, "long": 2, "illustrated": 2}
+# The long lane keeps a deeper buffer than the others on purpose. It is the
+# only lane whose generation is a separate scheduled job (story_generate_long),
+# so the buffer is what makes an empty queue at render time survivable: run #14
+# died because generation and rendering shared a slot and Groq rate-limited the
+# 17 calls a long story needs, leaving nothing to post.
+QUEUE_TARGETS = {"short": 4, "long": 3, "illustrated": 2}
 QUEUE_TARGET = QUEUE_TARGETS["short"]   # back-compat for anything importing this
 
 # Compact system prompt. We deliberately do NOT send the full 28KB story bible
@@ -339,7 +352,7 @@ def call_groq(system: str, user: str) -> dict:
     resp = None
     for model in candidates:
         # Retry on 429 (rate limit), honoring the reset window the API reports.
-        for attempt in range(4):
+        for attempt in range(GROQ_429_ATTEMPTS):
             resp = requests.post(
                 GROQ_URL,
                 headers={"Authorization": f"Bearer {os.environ['GROQ_API_KEY']}", "Content-Type": "application/json"},
@@ -351,9 +364,14 @@ def call_groq(system: str, user: str) -> dict:
                 },
                 timeout=60,
             )
-            if resp.status_code == 429 and attempt < 3:
+            if resp.status_code == 429 and attempt < GROQ_429_ATTEMPTS - 1:
                 wait = _parse_retry_seconds(resp)
-                print(f"[generate] Rate limited, waiting {wait:.0f}s before retry...")
+                # Print the body. A per-minute token cap and an exhausted daily
+                # quota both arrive as a bare 429, and they need opposite
+                # responses -- wait it out vs. stop and fix the plan. Without
+                # this the log said only "429" and the distinction was a guess.
+                print(f"[generate] Rate limited ({model}), waiting {wait:.0f}s "
+                      f"before retry. Groq said: {(resp.text or '').strip()[:300]}")
                 time.sleep(wait)
                 continue
             break
@@ -407,14 +425,14 @@ def _parse_retry_seconds(resp) -> float:
     retry_after = resp.headers.get("retry-after")
     if retry_after:
         try:
-            return min(float(retry_after), 30.0)
+            return min(float(retry_after), MAX_RETRY_WAIT)
         except ValueError:
             pass
     reset = resp.headers.get("x-ratelimit-reset-tokens", "")  # e.g. "17.78s" or "1m2s"
     m = re.match(r"(?:(\d+)m)?([\d.]+)s", reset)
     if m:
         secs = int(m.group(1) or 0) * 60 + float(m.group(2))
-        return min(secs + 1.0, 30.0)
+        return min(secs + 1.0, MAX_RETRY_WAIT)
     return 15.0
 
 
