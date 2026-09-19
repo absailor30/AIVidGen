@@ -13,6 +13,7 @@ Required environment variables:
 import json
 import os
 import re
+import sys
 import time
 from collections import Counter
 
@@ -46,7 +47,10 @@ MAX_TOKENS = int(os.environ.get("GROQ_MAX_TOKENS") or 4000)
 
 # How deep to keep each variant's queue. Long stories cost ~5 Groq calls each,
 # so a shallower buffer keeps a single run from spending its whole budget there.
-QUEUE_TARGETS = {"short": 4, "long": 2}
+# "illustrated" queues the same stories as "short" -- only the backdrop
+# differs at render time -- but needs its own queue so the two lanes never
+# claim each other's rows.
+QUEUE_TARGETS = {"short": 4, "long": 2, "illustrated": 2}
 QUEUE_TARGET = QUEUE_TARGETS["short"]   # back-compat for anything importing this
 
 # Compact system prompt. We deliberately do NOT send the full 28KB story bible
@@ -439,12 +443,18 @@ def pick_theme(state_rows: list, variant: str | None = None) -> str:
 def main():
     sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
 
-    target = QUEUE_TARGETS["short"]
+    # Which queue to fill. The renderer reads the same variable, so a workflow
+    # sets STORY_VARIANT once and both halves of the job agree.
+    variant = os.environ.get("STORY_VARIANT") or "short"
+    if variant not in QUEUE_TARGETS:
+        sys.exit(f"[generate] Unknown STORY_VARIANT {variant!r}; "
+                 f"expected one of {sorted(QUEUE_TARGETS)}")
+    target = QUEUE_TARGETS[variant]
     unclaimed = (
         sb.table("story_queue").select("id", count="exact")
-        .is_("claimed_at", "null").eq("variant", "short").execute().count
+        .is_("claimed_at", "null").eq("variant", variant).execute().count
     )
-    print(f"[generate] Unclaimed short stories: {unclaimed}")
+    print(f"[generate] Unclaimed {variant} stories: {unclaimed}")
     if unclaimed >= target:
         print("[generate] Queue healthy, nothing to do.")
         return
@@ -457,7 +467,7 @@ def main():
     attempts = 0
     while unclaimed + written < target and attempts < (target - unclaimed) * 6:
         attempts += 1
-        theme = pick_theme(state_rows, variant="short")
+        theme = pick_theme(state_rows, variant=variant)
         recent = [r for r in state_rows if r.get("theme") == theme][-25:]
         user_prompt = (
             f"Theme lock for this spin-off: \"{theme}\".\n\n"
@@ -469,10 +479,10 @@ def main():
             story = call_groq(system_prompt, user_prompt)
             validate_story(story)
             sb.table("story_queue").insert({
-                "variant": "short",
+                "variant": variant,
                 "theme": story["theme"], "title": story["title"], "payload": story,
             }).execute()
-            state_rows.append({"variant": "short", "theme": story["theme"],
+            state_rows.append({"variant": variant, "theme": story["theme"],
                                 "hook": story["dna"].get("hook"),
                                 "fingerprint": story["dna"].get("fingerprint"), "curve": story["curve"]})
             written += 1
