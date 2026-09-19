@@ -83,6 +83,28 @@ VARIANT_PROFILES = {
         "bgm_type": None,           # leave the schema default ("random")
         "edge_tts_timeout": None,   # 30s default is plenty for ~80s of audio
         "instagram": True,
+        "image_mode": False,
+    },
+    # Opt-in experiment: same 9:16 Short, but the backdrop is generated images
+    # instead of Pexels stock. Kept as its own variant so it competes with the
+    # short lane in story_metrics rather than replacing it -- the question
+    # "do illustrated videos do better?" is only answerable if both keep running.
+    "illustrated": {
+        "aspect": "9:16",
+        "voice_rate": 1.4,
+        # 5s rather than the short lane's 3s. Each frame costs a generation
+        # call, so this is ~15 images for a ~75s story instead of ~25, and a
+        # slow zoom reads better held for 5s than cut at 3s.
+        "clip_duration": 5,
+        "subtitle_enabled": True,
+        "font_size": 50,
+        "subtitle_position": "custom",
+        "custom_position": 66.0,
+        "n_threads": None,
+        "bgm_type": None,
+        "edge_tts_timeout": None,
+        "instagram": True,
+        "image_mode": True,
     },
     "long": {
         "aspect": "16:9",
@@ -108,6 +130,7 @@ VARIANT_PROFILES = {
         # default kills a 10-minute narration outright.
         "edge_tts_timeout": 900,
         "instagram": False,
+        "image_mode": False,
     },
 }
 
@@ -172,8 +195,14 @@ def claim_next_story(sb, theme: str | None = None, variant: str = "short"):
     return row
 
 
-def build_payload(story: dict, variant: str = "short") -> dict:
-    """The TaskVideoRequest fields for one story, per variant profile."""
+def build_payload(story: dict, variant: str = "short",
+                  image_paths: list[str] | None = None) -> dict:
+    """The TaskVideoRequest fields for one story, per variant profile.
+
+    image_paths, when given, switches the backdrop from Pexels to those files.
+    video.py already turns a local image into a clip with a slow zoom, so
+    nothing downstream changes.
+    """
     p = _profile(variant)
     payload = {
         "video_subject": story["title"],
@@ -209,6 +238,14 @@ def build_payload(story: dict, variant: str = "short") -> dict:
         payload["n_threads"] = p["n_threads"]
     if p["bgm_type"] is not None:
         payload["bgm_type"] = p["bgm_type"]
+    if image_paths:
+        # "local" makes task.py read video_materials instead of searching
+        # Pexels; the key stays in the payload but goes unused.
+        payload["video_source"] = "local"
+        payload["video_materials"] = [
+            {"provider": "local", "url": path, "duration": p["clip_duration"]}
+            for path in image_paths
+        ]
     return payload
 
 
@@ -221,7 +258,26 @@ def render_video(story: dict, variant: str = "short") -> str | None:
     if p["edge_tts_timeout"] is not None:
         config.app["edge_tts_timeout"] = p["edge_tts_timeout"]
 
-    payload = build_payload(story, variant)
+    image_paths = None
+    if p.get("image_mode"):
+        import generate_images
+
+        count = generate_images.image_count(story, p["voice_rate"], p["clip_duration"])
+        print(f"[render] Generating {count} illustrated frames...")
+        out_dir = os.path.join(utils.storage_dir(), "generated", utils.get_uuid())
+        image_paths = generate_images.generate_images(
+            story, count, out_dir, p["aspect"]
+        )
+        # Falling back is deliberate. A short story cut from 6 frames looks
+        # broken, and a lane that stops publishing is worse than one that
+        # posts with stock footage, so anything under two-thirds of the
+        # frames hands the video back to Pexels and says so.
+        if len(image_paths) < max(1, int(count * 2 / 3)):
+            print(f"[render] Only {len(image_paths)}/{count} frames generated; "
+                  f"falling back to Pexels for this video.")
+            image_paths = None
+
+    payload = build_payload(story, variant, image_paths)
     params = TaskVideoRequest(**payload)
     task_id = utils.get_uuid()
     sm.state.update_task(task_id)
