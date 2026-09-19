@@ -59,32 +59,51 @@ promise: "Every story has another side." Your stories are emotional, grounded,
 realistic family/relationship dramas that hook instantly and end with a
 satisfying, karmic vindication where the narrator comes out on top."""
 
-# Weighted by measured audience retention, not by taste. The weights come from
-# the first story_metrics snapshot (152 videos, average view percentage, which
-# unlike view count is comparable across videos of different ages):
+# Weighted by measured REACH, not retention. This replaces an earlier set of
+# weights derived from average view percentage, which turned out to be the
+# wrong axis.
 #
-#   Sibling Rivalry     78.4%      Wedding & Entitlement  67.0%
-#   In-Law Conflicts    74.9%      Marriage & Infidelity  60.4%
-#   Family Inheritance  73.1%      Friendship Betrayal    56.2%
-#   Career Sabotage     67.7%
+# With eight daily snapshots there are now enough videos of matched age to
+# compare fairly. Median views at day 3 (the age-independent measure), beside
+# retention over the same videos:
 #
-# Production had been almost exactly inverted against this: Marriage &
-# Infidelity was the most-produced theme and second-worst on retention, while
-# the two best were among the least produced. That is a direct consequence of
-# pick_theme picking the *least used* theme, which drives every theme toward an
-# equal share regardless of how it performs.
+#   theme                     n   median day-3 views   retention
+#   Wedding & Entitlement     3            797           68.3%
+#   Marriage & Infidelity     6            378           65.1%
+#   Sibling Rivalry           6            246           62.7%
+#   In-Law Conflicts          5            219           64.6%
+#   Career Sabotage          10            110           77.6%
+#   Family Inheritance        6             99           55.7%
 #
-# A weight is a relative share of the queue, not a ranking -- weight 3 gets
-# roughly three times the slots of weight 1. Nothing is dropped outright: a
-# theme with a low weight still appears often enough to keep earning new data,
-# and can be promoted when it does.
+# The two columns barely relate. Career Sabotage retains best of everything and
+# reaches fewer people than all but one theme; Family Inheritance is poor at
+# both. Retention says how much of a video someone watches once it starts,
+# which is not what decides how many people YouTube shows it to. Weighting on
+# it demoted Marriage & Infidelity to 1 when it is second on reach, and
+# promoted Family Inheritance, and channel-wide daily views fell from ~1750 to
+# ~550 over the week that followed.
+#
+# So: rank by median day-3 views, with retention only breaking ties. Medians
+# rather than means -- one Career Sabotage video pulled 754 views and dragged
+# its mean to 204 against a median of 110.
+#
+# Wedding & Entitlement rests on only 3 videos, so weight 4 is deliberately
+# short of what its median alone would justify; its lowest of the three (365)
+# still beats every other theme's median, which is what earns it the top slot.
+# Friendship Betrayal has no matched-age data at all yet and stays at 1 purely
+# to keep sampling it.
+#
+# A weight is a relative share of the queue, not a ranking -- weight 4 gets
+# roughly four times the slots of weight 1. Nothing is dropped outright, so a
+# down-weighted theme keeps earning data and can be promoted when it does.
+# Re-derive these from story_metrics rather than trusting them indefinitely.
 THEME_WEIGHTS = {
-    "Sibling Rivalry & Favoritism": 3,
-    "In-Law Conflicts": 3,
-    "Family Inheritance": 2,
-    "Career Sabotage / Workplace Betrayal": 2,
-    "Wedding & Family Entitlement": 2,
-    "Marriage & Infidelity": 1,
+    "Wedding & Family Entitlement": 4,
+    "Marriage & Infidelity": 3,
+    "Sibling Rivalry & Favoritism": 2,
+    "In-Law Conflicts": 2,
+    "Career Sabotage / Workplace Betrayal": 1,
+    "Family Inheritance": 1,
     "Friendship Betrayal & Glow-Up": 1,
 }
 
@@ -177,14 +196,17 @@ HARD RULES:
 - End with a short spoken follow-CTA woven naturally into the closing line
   (e.g. "Follow for the next one.").
 - Keep it grounded and realistic — no over-the-top or implausible twists.
-- OPENING CLASS: start with an incoming event or a moment of recognition — an
-  unexpected call or message that arrives, or the narrator suddenly realising
-  what something means. Measured retention by opening class, over 78 tagged
-  videos: unexpected-call 83.9%, recognition 74.0%, observed-behaviour 67.3%,
-  found-object 60.9%, overheard-sentence 60.2%. Do NOT open on the discovery of
-  a physical object (a letter, a receipt, a photo, a document) — that is the
-  channel's most overused opening and among its worst-retaining. An object may
-  still appear later as evidence; it must not be the first beat.
+- OPENING CLASS: vary it. Pick whichever of these best fits the story rather
+  than defaulting to one — an unexpected call or message arriving, a moment of
+  recognition, an observed behaviour, a found object, or an overheard sentence.
+  Avoid opening on a found object more than occasionally: it was over half of
+  everything the channel had published, and monotony is its own problem.
+  (An earlier version of this brief banned object openings outright, on a
+  retention gap measured across videos of wildly different ages. Compared
+  fairly at day 3, unexpected-call and recognition retain 61.6% and 61.0% --
+  indistinguishable -- so the gap did not survive. The ban also stopped any new
+  object openings being produced, which made the question unmeasurable. Keep
+  the classes in rotation so the data can settle it.)
 
 Respond with ONLY a single JSON object (no markdown fences, no commentary before or
 after), matching exactly:
