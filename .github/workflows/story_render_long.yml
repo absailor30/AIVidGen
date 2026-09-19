@@ -8,23 +8,24 @@ name: Twisty! StoryVault — long-form render & upload
 
 on:
   schedule:
-    # 21:30 UTC = 03:00 IST, off-peak so a ~45-minute render cannot overlap a
-    # Shorts slot.
+    # Wanted: the render STARTS around 21:30 UTC (03:00 IST), off-peak so a
+    # ~40-minute render cannot overlap a Shorts slot.
     #
-    # The Cloudflare Worker was given this slot when it was redeployed with
-    # event.cron routing, and this block was removed to avoid double-firing.
-    # On the first night it owned the slot, 2026-09-12, it dispatched NOTHING:
-    # no long run, and no short run either, so it was not a routing mistake.
-    # The Worker's other four crons fired normally that day and the next, and
-    # there were no stuck runs for its duplicate guard to trip over, so the
-    # cause is still unexplained. GitHub's cron is the less punctual scheduler
-    # -- the metrics job ran 5 hours late the same morning -- but for one daily
-    # video, late beats never.
+    # GitHub does not dispatch scheduled workflows on time; it queues them.
+    # Measured over five consecutive nights on the 21:30 slot, the delay was
+    # 2h24, 2h03, 2h11, 2h05 and 1h54 -- mean 2h07, spread only +/-15 min.
+    # That is systematic queueing, not jitter, so it can be calibrated out:
+    # asking for 19:30 lands the real start at roughly 21:25-21:55.
+    #
+    # This is a calibration against GitHub's current load, not a guarantee.
+    # Re-measure from the run list if the posting time drifts; if the delay
+    # ever disappears the run simply starts at 19:30 UTC (01:00 IST), which is
+    # still clear of every Shorts slot, so an early fire costs nothing.
     #
     # DELETE the Worker's "30 21 * * *" cron trigger in the Cloudflare
     # dashboard. If it ever starts working while this block exists, the lane
     # fires twice and posts two ten-minute videos a day.
-    - cron: "30 21 * * *"
+    - cron: "30 19 * * *"
 
   workflow_dispatch:
     inputs:
