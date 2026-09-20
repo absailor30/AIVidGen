@@ -1,0 +1,70 @@
+name: Twisty! StoryVault — long-form story generation
+
+# Generation for the long lane, split out of story_render_long.yml.
+#
+# They used to share a slot, and that is exactly how run #14 failed: the queue
+# was empty, the render workflow tried to generate a story inline, Groq rate-
+# limited the 17 sequential calls a long story needs, and the whole lane
+# published nothing. Generation and rendering had a single point of failure
+# between them.
+#
+# Split apart, a bad Groq minute at generation time costs nothing -- the render
+# six hours later claims a story from the buffer and never notices. The render
+# workflow keeps its own top-up step as a last resort, but with
+# continue-on-error so a 429 there can no longer take the render down with it.
+
+on:
+  schedule:
+    # Wanted: generation runs around 15:00 UTC, roughly six hours before the
+    # long render actually starts (~21:37 UTC, measured). Same GitHub queueing
+    # delay applies here -- ~2h07 on this repo -- so asking for 13:00 lands it
+    # near 15:00. The exact hour does not matter: anything comfortably before
+    # the render, with a buffer already in the queue behind it, is fine.
+    - cron: "0 13 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"
+    # Generous because the 429 backoff is now allowed to wait: up to 6 attempts
+    # at up to 120s per Groq call, 17 calls per story, up to 3 restarts, 2
+    # stories. That ceiling is never reached in practice -- a healthy run is a
+    # couple of minutes -- but waiting out a rate limit is the whole point, so
+    # the timeout must not be the thing that cuts it short.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Top up the long story queue
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL || secrets.GROQ_MODEL }}
+          GROQ_MAX_TOKENS: ${{ vars.GROQ_MAX_TOKENS || secrets.GROQ_MAX_TOKENS }}
+        shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
+        run: python generate_long_stories.py 2>&1 | tee -a /tmp/generate.log
+
+      - name: Notify Telegram on failure
+        if: failure()
+        shell: bash
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          TAIL=$(tail -c 2000 /tmp/generate.log 2>/dev/null || true)
+          [ -n "$TAIL" ] || TAIL="(no output captured - the job died before the script ran)"
+          MSG=$(printf 'Twisty StoryVault LONG-FORM GENERATION FAILED (run #%s)\n\nTonight'"'"'s render may still succeed from the queue buffer - check the queue depth before treating this as an outage.\n\n%s\n\n%s' \
+            "$RUN_NUMBER" "$TAIL" "$RUN_URL")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="$MSG" > /dev/null

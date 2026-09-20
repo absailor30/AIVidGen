@@ -66,7 +66,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Top up long story queue if running low
+      # Last-resort top-up only. Generation proper lives in
+      # story_generate_long.yml, which runs ~6 hours earlier and keeps a buffer
+      # of 3 in the queue. This step exists for the case where that job failed
+      # AND the buffer ran dry, so it is allowed to fail: run #14 died here
+      # when Groq rate-limited it, and a 429 in a fallback path must never stop
+      # a render that has a perfectly good story waiting in the queue. If the
+      # queue really is empty, render_from_supabase.py exits non-zero with a
+      # clear message and the Telegram alert still fires.
+      - name: Top up long story queue if running low (best effort)
+        continue-on-error: true
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
