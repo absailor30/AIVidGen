@@ -69,6 +69,25 @@ VOICE_SPEED = 1.4
 # Everything that differs between the two video formats. The short profile
 # reproduces exactly what shipped before this table existed — see
 # test_variant_profiles.py, which asserts the payload byte-for-byte.
+# NOTE on bgm_type: every profile sets it to "" -- no background music, on
+# every lane.
+#
+# This is a copyright decision, not a taste one. The 29 tracks in
+# resource/songs/ came with the MoneyPrinterTurbo fork this repo is built on;
+# their licensing is unknown to us, and YouTube began issuing copyright claims
+# on uploads that used them.
+#
+# Turning the volume down does NOT help. Content ID matches an audio
+# fingerprint, so a claim lands just the same at 5% as at 100% -- quieter music
+# is a worse video with the same problem. Removal is the only fix that works.
+#
+# Note that "" is load-bearing: the schema default for bgm_type is "random"
+# (app/models/schema.py), so leaving it None means music, not silence. That is
+# how all three lanes ended up with backing tracks nobody chose.
+#
+# To bring music back, put tracks YOU have the rights to (or verified
+# royalty-free, or from YouTube's own Audio Library) in resource/songs/, delete
+# the inherited ones, and set bgm_type to "random" again.
 VARIANT_PROFILES = {
     "short": {
         "aspect": "9:16",
@@ -80,7 +99,7 @@ VARIANT_PROFILES = {
         # 66% down the frame: high enough to clear the Shorts/Reels UI buttons.
         "custom_position": 66.0,
         "n_threads": None,          # leave the schema default (2)
-        "bgm_type": None,           # leave the schema default ("random")
+        "bgm_type": "",             # no backing track -- see NOTE below
         "edge_tts_timeout": None,   # 30s default is plenty for ~80s of audio
         "instagram": True,
         "image_mode": False,
@@ -101,7 +120,7 @@ VARIANT_PROFILES = {
         "subtitle_position": "custom",
         "custom_position": 66.0,
         "n_threads": None,
-        "bgm_type": None,
+        "bgm_type": "",             # no backing track -- see NOTE below
         "edge_tts_timeout": None,
         "instagram": True,
         "image_mode": True,
@@ -124,7 +143,7 @@ VARIANT_PROFILES = {
         "subtitle_position": "bottom",
         "custom_position": 88.0,
         "n_threads": 4,             # ubuntu-latest has 4 vCPU; default 2 idles half
-        "bgm_type": "random",       # ten minutes of dry narration is a hard sit
+        "bgm_type": "",             # no backing track -- see NOTE below
         # edge_tts applies ONE total timeout to the whole synthesis (a deadline
         # set once before the consume loop, app/services/voice.py). The 30s
         # default kills a 10-minute narration outright.
