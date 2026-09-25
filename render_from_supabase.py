@@ -444,6 +444,70 @@ def _ig_check(resp, step: str):
     raise RuntimeError(f"Instagram {step} returned HTTP {resp.status_code}: {body}")
 
 
+def _ig_transient(resp) -> bool:
+    """True when Meta is telling us to come back later rather than to fix something.
+
+    Meta marks recoverable failures itself: run #305 got
+
+        HTTP 500 {"error":{"message":"An unexpected error has occurred.
+        Please retry your request later.","type":"OAuthException",
+        "is_transient":true,"code":2}}
+
+    Note the type says OAuthException even though nothing is wrong with the
+    token -- Meta reuses that type broadly, so the type is NOT a reliable
+    signal and is deliberately not read here. is_transient and the status code
+    are. An expired token arrives as a 400 with is_transient absent, and must
+    NOT be retried: no amount of backoff fixes it, and retrying only delays
+    the alert that tells us to rotate it.
+    """
+    if resp.status_code >= 500:
+        return True
+    try:
+        return bool(resp.json().get("error", {}).get("is_transient"))
+    except Exception:
+        # A non-JSON body from a 4xx is not something to retry blindly.
+        return False
+
+
+def _ig_call(step: str, fn, attempts: int = 4):
+    """Make an Instagram request, retrying only what Meta says is retryable.
+
+    Instagram posting is the last thing a run does, after the video is already
+    live on YouTube, so a blip here turns a successful post into a failed run
+    and a Telegram alert -- exactly the pattern sb_retry was added for on the
+    Supabase side. Run #305 lost a Reel to a single 500 that asked to be
+    retried.
+
+    Backoff is 5/10/20s rather than sb_retry's 2/4/8: Meta's transient errors
+    are usually brief backend hiccups but not instant, and the job has time.
+
+    On publish specifically, a retry is safe because a creation_id can only be
+    published once -- if the first call did land despite the error, the retry
+    is rejected rather than posting a second Reel.
+    """
+    delay = 5.0
+    for attempt in range(attempts):
+        try:
+            resp = fn()
+        except (requests.Timeout, requests.ConnectionError) as e:
+            if attempt == attempts - 1:
+                raise RuntimeError(f"Instagram {step} failed to connect: {e}") from e
+            print(f"[instagram] {step} connection error ({str(e)[:120]}), "
+                  f"retrying in {delay:.0f}s ({attempt + 1}/{attempts - 1})")
+            time.sleep(delay)
+            delay *= 2
+            continue
+
+        if resp.ok:
+            return resp
+        if attempt == attempts - 1 or not _ig_transient(resp):
+            _ig_check(resp, step)      # raises with Meta's own explanation
+        print(f"[instagram] {step} returned HTTP {resp.status_code} (transient), "
+              f"retrying in {delay:.0f}s ({attempt + 1}/{attempts - 1})")
+        time.sleep(delay)
+        delay *= 2
+
+
 def resolve_ig_token(sb) -> str | None:
     """The live Instagram token: the auto-refreshed one if it is still valid.
 
@@ -477,7 +541,7 @@ def upload_to_instagram(video_url: str, kit: dict, token: str) -> str | None:
         f"#{h.lstrip('#')}" for h in kit["instagram_hashtags"]
     )
 
-    create_resp = requests.post(
+    create_resp = _ig_call("media container creation", lambda: requests.post(
         f"{GRAPH_API_BASE}/{ig_user_id}/media",
         data={
             "media_type": "REELS",
@@ -486,19 +550,17 @@ def upload_to_instagram(video_url: str, kit: dict, token: str) -> str | None:
             "access_token": token,
         },
         timeout=60,
-    )
-    _ig_check(create_resp, "media container creation")
+    ))
     creation_id = create_resp.json()["id"]
 
     # Poll until Instagram finishes downloading/processing the video
     deadline = time.time() + 300
     while time.time() < deadline:
-        status_resp = requests.get(
+        status_resp = _ig_call("container status poll", lambda: requests.get(
             f"{GRAPH_API_BASE}/{creation_id}",
             params={"fields": "status_code", "access_token": token},
             timeout=30,
-        )
-        _ig_check(status_resp, "container status poll")
+        ))
         status = status_resp.json().get("status_code")
         if status == "FINISHED":
             break
@@ -508,12 +570,11 @@ def upload_to_instagram(video_url: str, kit: dict, token: str) -> str | None:
     else:
         raise TimeoutError("Instagram container never finished processing")
 
-    publish_resp = requests.post(
+    publish_resp = _ig_call("media publish", lambda: requests.post(
         f"{GRAPH_API_BASE}/{ig_user_id}/media_publish",
         data={"creation_id": creation_id, "access_token": token},
         timeout=60,
-    )
-    _ig_check(publish_resp, "media publish")
+    ))
     return publish_resp.json().get("id")
 
 
