@@ -673,6 +673,10 @@ def main():
         "curve": story["curve"],
         "score": story["score"],
         "tracking_tag": story["tracking_tag"],
+        # Closes the rotation loop: pick_cta_style reads this back out of
+        # story_state on the next generation run. .get() because stories queued
+        # before the rotation existed do not carry it.
+        "cta_style": story.get("cta_style"),
         "youtube_id": youtube_id,
         "instagram_id": instagram_id,
     }

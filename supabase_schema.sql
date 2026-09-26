@@ -119,3 +119,12 @@ create table if not exists ig_token (
   constraint ig_token_singleton check (id = 1)
 );
 alter table ig_token enable row level security;
+
+-- (c) Rotated call to action. pick_cta_style in generate_stories_cloud.py
+--     rotates share / comment_word / follow by reading which styles were used
+--     recently, so the column is what makes the rotation survive across runs
+--     (every GitHub Actions run is a fresh container). Nullable on purpose:
+--     rows written before this existed read as NULL and are ignored, so the
+--     cycle starts fresh instead of skewing.
+--
+-- alter table story_state add column if not exists cta_style text;
