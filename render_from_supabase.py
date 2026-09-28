@@ -533,14 +533,40 @@ def resolve_ig_token(sb) -> str | None:
     return env_token or None
 
 
-def upload_to_instagram(video_url: str, kit: dict, token: str) -> str | None:
-    """Publishes a Reel via the Instagram API (Instagram Login) using a temporary signed URL."""
-    ig_user_id = os.environ["IG_USER_ID"]
+class _ContainerError(RuntimeError):
+    """Meta finished processing a container and rejected it (status ERROR)."""
 
-    caption = f"{kit['instagram_caption']}\n\n" + " ".join(
-        f"#{h.lstrip('#')}" for h in kit["instagram_hashtags"]
-    )
 
+def _ig_container_reason(creation_id: str, token: str) -> str:
+    """Best-effort: ask Meta WHY a container failed. Never raises.
+
+    Deliberately a separate request, made only after ERROR is already known,
+    rather than a second field added to the routine status poll. The Graph API
+    answers an unrecognised field with a hard 400, and I could not verify from
+    Meta's reference (unreachable from the build environment) that the
+    container exposes a "status" detail field. Folded into the poll, a wrong
+    guess would have broken every Reel; isolated here, it costs one quiet
+    failed lookup and the Reel's handling is unchanged.
+    """
+    try:
+        resp = requests.get(
+            f"{GRAPH_API_BASE}/{creation_id}",
+            params={"fields": "status", "access_token": token},
+            timeout=30,
+        )
+        if resp.ok:
+            return str(resp.json().get("status") or "no detail given")
+        return f"reason lookup returned HTTP {resp.status_code}: {(resp.text or '')[:200]}"
+    except Exception as e:
+        return f"reason lookup failed: {str(e)[:120]}"
+
+
+def _ig_create_and_wait(ig_user_id: str, video_url: str, caption: str, token: str) -> str:
+    """Create a Reel container and poll it to FINISHED. Returns the creation_id.
+
+    Raises _ContainerError when Meta rejects the container, so the caller can
+    decide to try a fresh one; any other failure propagates as before.
+    """
     create_resp = _ig_call("media container creation", lambda: requests.post(
         f"{GRAPH_API_BASE}/{ig_user_id}/media",
         data={
@@ -563,12 +589,43 @@ def upload_to_instagram(video_url: str, kit: dict, token: str) -> str | None:
         ))
         status = status_resp.json().get("status_code")
         if status == "FINISHED":
-            break
+            return creation_id
         if status == "ERROR":
-            raise RuntimeError("Instagram container processing failed")
+            reason = _ig_container_reason(creation_id, token)
+            raise _ContainerError(f"container {creation_id} rejected by Meta ({reason})")
         time.sleep(10)
+    raise TimeoutError("Instagram container never finished processing")
+
+
+def upload_to_instagram(video_url: str, kit: dict, token: str) -> str | None:
+    """Publishes a Reel via the Instagram API (Instagram Login) using a temporary signed URL."""
+    ig_user_id = os.environ["IG_USER_ID"]
+
+    caption = f"{kit['instagram_caption']}\n\n" + " ".join(
+        f"#{h.lstrip('#')}" for h in kit["instagram_hashtags"]
+    )
+
+    # A container that reaches ERROR is dead -- it cannot be polled back into
+    # FINISHED -- so the retry for a processing failure is a fresh container,
+    # not another poll. Run #317 lost a Reel this way: the container was
+    # created fine, then Meta's processing rejected it within ~14 seconds,
+    # while YouTube had just accepted the identical file. That points at
+    # Meta's side rather than the video, and a new container is the remedy.
+    #
+    # One retry, not several. If the file genuinely is unacceptable, a second
+    # container fails the same way and the reason logged below says why;
+    # hammering it further would only delay the alert.
+    last_error = None
+    for container_attempt in range(2):
+        try:
+            creation_id = _ig_create_and_wait(ig_user_id, video_url, caption, token)
+            break
+        except _ContainerError as e:
+            last_error = e
+            if container_attempt == 0:
+                print(f"[instagram] {e}; creating a fresh container and retrying once.")
     else:
-        raise TimeoutError("Instagram container never finished processing")
+        raise RuntimeError(f"Instagram container processing failed twice: {last_error}")
 
     publish_resp = _ig_call("media publish", lambda: requests.post(
         f"{GRAPH_API_BASE}/{ig_user_id}/media_publish",
