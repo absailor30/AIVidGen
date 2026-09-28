@@ -210,8 +210,12 @@ HARD RULES:
   fewer than 270 words — expand each of the four beats with concrete, specific,
   sensory detail rather than rushing to the ending.
 - First person, one paragraph, no quotation marks around dialogue.
-- End with a short spoken follow-CTA woven naturally into the closing line
-  (e.g. "Follow for the next one.").
+- End with ONE spoken call to action, woven naturally into the closing line.
+  The user message carries a CTA INSTRUCTION for this story -- follow it exactly
+  and use no other ask. It is rotated per story (share / comment a word /
+  follow), because a single clear ask outperforms three competing ones, and
+  because a channel that makes the same request every time gets tuned out.
+  Echo which one you were given back in the "cta_style" field.
 - Keep it grounded and realistic — no over-the-top or implausible twists.
 - OPENING CLASS: vary it. Pick whichever of these best fits the story rather
   than defaulting to one — an unexpected call or message arriving, a moment of
@@ -234,6 +238,8 @@ after), matching exactly:
   "keywords": "... 15-25 word stock-footage search string, plain words, no commas ...",
   "dna": {"hook": "...", "relationship": "...", "conflict": "...", "emotion": "...", "payoff": "... the satisfying/karmic resolution ...", "fingerprint": "..."},
   "curve": "... describe the hook -> build-up -> trigger -> satisfying-close arc ...",
+  "cta_style": "... copy the cta_style token given in the CTA INSTRUCTION, exactly ...",
+  "cta_keyword": "... the single word for the comment CTA, or \"\" for the other styles ...",
   "variables_changed": ["...", "..."],
   "score": 88,
   "cooldown_flag": "...",
@@ -256,6 +262,54 @@ def _check_self_contained(text: str):
     for banned in ("part 1", "part 2", "part one", "part two", "to be continued"):
         if banned in lowered:
             raise ValueError(f"story must be self-contained, found '{banned}'")
+
+
+def validate_cta(story: dict, expected_style: str):
+    """The CTA is only rotated if the model actually used the style it was given.
+
+    Without this the model drifts back to "follow for more" on every story --
+    it is the most common ending in its training data, and the one the brief
+    used to hardcode. A silent drift would look like rotation in the database
+    and be a single CTA in the videos.
+    """
+    style = (story.get("cta_style") or "").strip()
+    if style != expected_style:
+        raise ValueError(f"cta_style is {style!r}, expected {expected_style!r}")
+
+    text = story["story"].lower()
+    if expected_style == "comment_word":
+        word = (story.get("cta_keyword") or "").strip()
+        if not word or not word.isalpha() or len(word) > 15:
+            raise ValueError(f"cta_keyword must be one plain word, got {word!r}")
+        if "comment" not in text:
+            raise ValueError("comment CTA must ask the viewer to comment")
+        # The word must appear in the STORY BODY, not just in the CTA line --
+        # checking the whole text is vacuous, since the closing ask always
+        # contains the word by construction. Everything before the final
+        # "comment" is the body.
+        body = text[:text.rfind("comment")]
+        if word.lower() not in body:
+            # The point of this style is a word the viewer just heard. One that
+            # appears only in the ask reads as a spam prompt.
+            raise ValueError(
+                f"cta_keyword {word!r} does not appear in the story body "
+                f"(only in the CTA line)"
+            )
+    elif expected_style == "share":
+        if not any(w in text for w in ("send this", "share this", "send it", "share it")):
+            raise ValueError("share CTA must ask the viewer to send or share it")
+    elif expected_style == "follow":
+        if "follow" not in text:
+            raise ValueError("follow CTA must ask the viewer to follow")
+
+    # Competing asks defeat the whole reason for rotating one at a time. Only
+    # the tail is checked: a story can legitimately use these words in prose.
+    tail = text[-320:]
+    others = {"share": ("follow", "comment"), "comment_word": ("follow", "share this"),
+              "follow": ("comment", "share this")}[expected_style]
+    for other in others:
+        if other in tail:
+            raise ValueError(f"CTA style {expected_style} must not also ask to {other}")
 
 
 def validate_story(story: dict, variant: str = "short"):
@@ -436,6 +490,63 @@ def _parse_retry_seconds(resp) -> float:
     return 15.0
 
 
+CTA_STYLES = {
+    # "share" asks for a send, which is the strongest ranking signal on both
+    # Shorts and Reels -- a share is worth far more than a like, and these
+    # stories are built to make someone think of a specific person.
+    "share": (
+        "Close by asking the viewer to SEND or SHARE this with someone who has "
+        "been through the same thing. Make it specific to this story's situation, "
+        "not generic -- name the kind of person who would recognise it. One "
+        "sentence, spoken naturally as the last line. Do NOT ask for a follow, "
+        "a like or a comment in this story."
+    ),
+    # "comment_word" trades reach for comment volume. The word has to come from
+    # the story itself or the prompt reads as spam, which is why cta_keyword is
+    # generated per story and validated against the story text.
+    "comment_word": (
+        "Close by asking the viewer to comment ONE specific word if they have "
+        "been through the same thing. Choose a single word that appears in this "
+        "story and carries its emotional weight (e.g. the object, the room, the "
+        "phrase that stung). Put that word in the cta_keyword field, and use it "
+        "in the closing line in the form: comment <WORD> if you went through "
+        "the same. One sentence, spoken naturally. Do NOT ask for a follow, a "
+        "like or a share in this story."
+    ),
+    "follow": (
+        "Close by asking the viewer to follow for more stories like this. One "
+        "sentence, spoken naturally as the last line, in the channel's voice -- "
+        "not 'don't forget to smash that follow button'. Do NOT ask for a "
+        "comment or a share in this story."
+    ),
+}
+
+
+def pick_cta_style(state_rows: list, variant: str | None = None) -> str:
+    """Least-used CTA style, rotated per variant.
+
+    Deliberately one CTA per story rather than stacking all three. Asking for a
+    share AND a comment AND a follow in the last ten seconds gets none of them;
+    a single clear ask is the whole point of rotating instead of combining.
+
+    Rotation is driven by story_state, so it survives across runs and runners --
+    the generator is stateless and every run is a fresh container, so anything
+    held in memory would reset the cycle on every invocation. Rows written
+    before cta_style existed read as None and are ignored, which means the
+    cycle simply starts fresh rather than skewing towards whatever is first.
+    """
+    rows = state_rows
+    if variant is not None:
+        rows = [r for r in rows if (r.get("variant") or "short") == variant]
+    counts = {c: 0 for c in CTA_STYLES}
+    for r in rows[-60:]:
+        if r.get("cta_style") in counts:
+            counts[r["cta_style"]] += 1
+    # Least-used wins; ties break on CTA_STYLES order, which keeps the cycle
+    # deterministic instead of drifting.
+    return min(CTA_STYLES, key=lambda c: (counts[c], list(CTA_STYLES).index(c)))
+
+
 def pick_theme(state_rows: list, variant: str | None = None) -> str:
     """Least-used theme. Scoped per variant when given, so a long video does not
     starve the short rotation of a theme (different audiences, independent cycles)."""
@@ -479,16 +590,24 @@ def main():
 
     system_prompt = CHANNEL_BRIEF + AUTOMATION_TAIL
 
-    state_rows = sb.table("story_state").select("variant,theme,hook,fingerprint,curve").execute().data
+    # cta_style is selected because pick_cta_style rotates on it. Leave it out
+    # and every run sees None, picks the first style, and "rotation" becomes a
+    # single CTA forever.
+    state_rows = sb.table("story_state").select(
+        "variant,theme,hook,fingerprint,curve,cta_style"
+    ).execute().data
 
     written = 0
     attempts = 0
     while unclaimed + written < target and attempts < (target - unclaimed) * 6:
         attempts += 1
         theme = pick_theme(state_rows, variant=variant)
+        cta_style = pick_cta_style(state_rows, variant=variant)
         recent = [r for r in state_rows if r.get("theme") == theme][-25:]
         user_prompt = (
             f"Theme lock for this spin-off: \"{theme}\".\n\n"
+            f"CTA INSTRUCTION (cta_style token: {cta_style})\n"
+            f"{CTA_STYLES[cta_style]}\n\n"
             f"Recent entries in this theme batch (avoid repeating fingerprints/hooks/curves):\n"
             f"{json.dumps(recent, ensure_ascii=False)}\n\n"
             f"Generate one new story now."
@@ -496,6 +615,7 @@ def main():
         try:
             story = call_groq(system_prompt, user_prompt)
             validate_story(story)
+            validate_cta(story, cta_style)
             sb.table("story_queue").insert({
                 "variant": variant,
                 "theme": story["theme"], "title": story["title"], "payload": story,
