@@ -128,3 +128,20 @@ alter table ig_token enable row level security;
 --     cycle starts fresh instead of skewing.
 --
 -- alter table story_state add column if not exists cta_style text;
+
+-- (d) Audience retention curves. One row per 1% of a video's runtime, 100 per
+--     video, captured once when the video is 3 days old (collect_metrics.py).
+--     story_metrics holds the AVERAGE share watched; this holds WHERE viewers
+--     left, which is what a beat-structure edit actually needs. RLS on with no
+--     policies: only the service key used by the collector can read or write.
+--
+-- create table if not exists story_retention (
+--     youtube_id text not null,
+--     elapsed_ratio numeric not null,          -- 0.01 .. 1.00
+--     audience_watch_ratio numeric,            -- watches of this moment / views
+--     relative_retention_performance numeric,  -- 0..1 vs similar-length videos
+--     age_days int not null,                   -- video age at capture
+--     collected_on date not null default current_date,
+--     primary key (youtube_id, elapsed_ratio)
+-- );
+-- alter table story_retention enable row level security;

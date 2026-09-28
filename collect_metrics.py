@@ -27,7 +27,7 @@ import base64
 import os
 import pickle
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 
 from supabase import create_client
 
@@ -39,6 +39,24 @@ ANALYTICS_SCOPE = "https://www.googleapis.com/auth/yt-analytics.readonly"
 # Data API videos.list caps id lists at 50; the Analytics filter caps at 500.
 DATA_BATCH = 50
 ANALYTICS_BATCH = 200
+
+# Retention curves are captured once per video, at this age. Three days is the
+# same age the matched-age analysis compares everything at, so a curve lines up
+# with the averages already in story_metrics instead of mixing a day-1 curve
+# with a day-40 one. It is also late enough that a Short has most of its views.
+CURVE_MIN_AGE_DAYS = 3
+
+# Hard ceiling on curve requests per run. The report takes ONE video per call
+# (Google's reference: it "does not support the ability to specify multiple
+# values for the video filter"), so the first run backfills the whole catalogue
+# at one request each. This bounds that run; anything left over is picked up
+# the next day.
+#
+# Sized against the workflow's 15-minute timeout, not the API: the existing
+# snapshot takes under a minute, and 150 sequential calls stays around 6-7
+# minutes even on a slow day. A timeout would kill the whole job, snapshot
+# write included, so the ~230-video backfill spans two runs instead.
+CURVE_MAX_PER_RUN = 150
 
 
 def supabase_client():
@@ -128,6 +146,105 @@ def fetch_retention(creds, video_ids: list[str]) -> dict[str, dict]:
     return out
 
 
+def videos_needing_curves(sb) -> list[tuple[str, int]]:
+    """(youtube_id, age_days) for videos old enough that have no curve yet.
+
+    A video gets exactly one curve. It is re-requested only while the report
+    comes back empty -- YouTube withholds retention for videos with too few
+    views -- so a slow starter is retried daily until it qualifies.
+    """
+    now = datetime.now(timezone.utc)
+    rows = (sb.table("story_state")
+            .select("youtube_id,created_at")
+            .not_.is_("youtube_id", "null")
+            .execute().data)
+    have = {r["youtube_id"] for r in
+            sb.table("story_retention").select("youtube_id").execute().data}
+    out, seen = [], set()
+    for r in rows:
+        vid = r["youtube_id"]
+        if not vid or vid in seen or vid in have:
+            continue
+        seen.add(vid)
+        created = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+        age = (now - created).days
+        if age >= CURVE_MIN_AGE_DAYS:
+            out.append((vid, age))
+    # Youngest first: they are the ones closest to the intended day-3 capture,
+    # so if the per-run cap bites, the backlog is what waits, not fresh videos.
+    out.sort(key=lambda t: t[1])
+    return out
+
+
+def fetch_retention_curve(analytics, video_id: str) -> list[dict]:
+    """The 100-point audience retention curve for one video.
+
+    This is what averageViewPercentage cannot tell us: not how much of a story
+    people watched on average, but WHERE they left. The structure analysis
+    found the median viewer gone at 62% of the story -- inside the betrayal
+    beat, before the payoff -- and only the curve can say whether that is a
+    steady slide or a cliff at one sentence.
+    """
+    resp = analytics.reports().query(
+        ids="channel==MINE",
+        startDate=ANALYTICS_START,
+        endDate=date.today().isoformat(),
+        dimensions="elapsedVideoTimeRatio",
+        metrics="audienceWatchRatio,relativeRetentionPerformance",
+        filters=f"video=={video_id}",
+    ).execute()
+    cols = [h["name"] for h in resp.get("columnHeaders", [])]
+    return [dict(zip(cols, row)) for row in resp.get("rows", [])]
+
+
+def collect_curves(sb, creds) -> tuple[int, int, int]:
+    """Capture curves for every eligible video. Returns (captured, empty, failed).
+
+    Deliberately runs AFTER the daily snapshot is written, and one video's
+    failure never stops the rest: curves are the new, optional half of this
+    job, and must not be able to cost the snapshot that already works.
+    """
+    from googleapiclient.discovery import build
+
+    pending = videos_needing_curves(sb)
+    if not pending:
+        print("[metrics] Curves: nothing new to capture.")
+        return 0, 0, 0
+    if len(pending) > CURVE_MAX_PER_RUN:
+        print(f"[metrics] Curves: {len(pending)} pending, capturing the youngest "
+              f"{CURVE_MAX_PER_RUN} this run; the rest follow tomorrow.")
+        pending = pending[:CURVE_MAX_PER_RUN]
+
+    analytics = build("youtubeAnalytics", "v2", credentials=creds)
+    today = date.today().isoformat()
+    captured = empty = failed = 0
+    for vid, age in pending:
+        try:
+            points = fetch_retention_curve(analytics, vid)
+        except Exception as e:
+            failed += 1
+            print(f"[metrics] Curve failed for {vid}: {str(e)[:160]}")
+            continue
+        if not points:
+            empty += 1          # below YouTube's view threshold; retry tomorrow
+            continue
+        rows = [{
+            "youtube_id": vid,
+            "elapsed_ratio": p.get("elapsedVideoTimeRatio"),
+            "audience_watch_ratio": p.get("audienceWatchRatio"),
+            "relative_retention_performance": p.get("relativeRetentionPerformance"),
+            "age_days": age,
+            "collected_on": today,
+        } for p in points]
+        sb.table("story_retention").upsert(
+            rows, on_conflict="youtube_id,elapsed_ratio").execute()
+        captured += 1
+
+    print(f"[metrics] Curves: {captured} captured, {empty} not yet available "
+          f"(too few views), {failed} failed, of {len(pending)} eligible.")
+    return captured, empty, failed
+
+
 def main():
     sb = supabase_client()
     creds = youtube_credentials()
@@ -170,6 +287,17 @@ def main():
         sb.table("story_metrics").upsert(
             rows[i:i + 100], on_conflict="youtube_id,collected_on").execute()
     print(f"[metrics] Wrote {len(rows)} snapshots for {today}.")
+
+    # Curves need the same Analytics scope as the averages. Without it there
+    # is nothing to attempt, and the scope message above already said so.
+    if ANALYTICS_SCOPE in scopes:
+        captured, empty, failed = collect_curves(sb, creds)
+        # Partial failure is logged and tolerated. Total failure is not: a
+        # collector that attempts curves every day and silently lands none is
+        # exactly the kind of quiet breakage this job exists to prevent.
+        if failed and not captured and not empty:
+            sys.exit(f"[metrics] Every retention curve request failed ({failed}). "
+                     f"The daily snapshot above was still written.")
 
 
 if __name__ == "__main__":
