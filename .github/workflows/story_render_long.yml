@@ -7,26 +7,11 @@ name: Twisty! StoryVault — long-form render & upload
 # for the rest of the day.
 
 on:
-  schedule:
-    # Wanted: the render STARTS around 21:30 UTC (03:00 IST), off-peak so a
-    # ~40-minute render cannot overlap a Shorts slot.
-    #
-    # GitHub does not dispatch scheduled workflows on time; it queues them.
-    # Measured over five consecutive nights on the 21:30 slot, the delay was
-    # 2h24, 2h03, 2h11, 2h05 and 1h54 -- mean 2h07, spread only +/-15 min.
-    # That is systematic queueing, not jitter, so it can be calibrated out:
-    # asking for 19:30 lands the real start at roughly 21:25-21:55.
-    #
-    # This is a calibration against GitHub's current load, not a guarantee.
-    # Re-measure from the run list if the posting time drifts; if the delay
-    # ever disappears the run simply starts at 19:30 UTC (01:00 IST), which is
-    # still clear of every Shorts slot, so an early fire costs nothing.
-    #
-    # DELETE the Worker's "30 21 * * *" cron trigger in the Cloudflare
-    # dashboard. If it ever starts working while this block exists, the lane
-    # fires twice and posts two ten-minute videos a day.
-    - cron: "30 19 * * *"
-
+  # No schedule: here on purpose. The Cloudflare Worker's "30 21 * * *" cron
+  # dispatches this workflow at 21:30 UTC (03:00 IST) and fires on time;
+  # GitHub's own cron ran 2-3 hours late. Both were active from 2026-09-21,
+  # which posted TWO long videos a night. Do not add a schedule back unless
+  # that Worker trigger is deleted first.
   workflow_dispatch:
     inputs:
       publish_at:
