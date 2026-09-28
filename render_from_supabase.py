@@ -734,6 +734,8 @@ def main():
         # story_state on the next generation run. .get() because stories queued
         # before the rotation existed do not carry it.
         "cta_style": story.get("cta_style"),
+        # Hook/CTA experiment arm; NULL for stories queued before it began.
+        "experiment_arm": story.get("experiment_arm"),
         "youtube_id": youtube_id,
         "instagram_id": instagram_id,
     }

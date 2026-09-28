@@ -145,3 +145,7 @@ alter table ig_token enable row level security;
 --     primary key (youtube_id, elapsed_ratio)
 -- );
 -- alter table story_retention enable row level security;
+
+-- (e) Hook/CTA experiment arm ('control' | 'tight'), stamped at generation.
+--
+-- alter table story_state add column if not exists experiment_arm text;

@@ -547,6 +547,52 @@ def pick_cta_style(state_rows: list, variant: str | None = None) -> str:
     return min(CTA_STYLES, key=lambda c: (counts[c], list(CTA_STYLES).index(c)))
 
 
+# Hook/CTA experiment, started 2026-09-28. The retention curves showed the
+# loss is at the front: ~45% of viewers leave in the first 30% of a Short, the
+# middle is nearly flat, and the last 10% (the sign-off and CTA) loses half of
+# whoever is left. Half of Shorts get a sharper opening and a one-line CTA
+# ("tight"); the other half are generated exactly as before ("control"), so
+# story_retention can compare the two directly instead of before-vs-after,
+# which would confound the change with whatever else shifts week to week.
+EXPERIMENT_ARMS = ("control", "tight")
+
+TIGHT_INSTRUCTION = (
+    "OPENING (this story is in the 'tight' format): the first sentence must "
+    "drop the viewer straight into the conflict -- the moment it goes wrong -- "
+    "in 12 words or fewer. No scene-setting, no names, no backstory, no 'So "
+    "this happened' in the first two sentences; fold any context in later, "
+    "only where it is needed. Reach the betrayal within the first quarter of "
+    "the story.\n"
+    "CTA: deliver the call to action above as ONE short sentence of 10 words "
+    "or fewer, and make it the very last sentence. No sign-off after it."
+)
+
+
+def pick_experiment_arm(assigned: list) -> str:
+    """Alternate arms so the two groups stay the same size.
+
+    `assigned` is every arm already given out for this variant -- published
+    stories AND stories still waiting in the queue. Counting only published
+    ones would let a run that queues several stories give them all the same
+    arm, since none of them are in story_state yet.
+    """
+    counts = {a: 0 for a in EXPERIMENT_ARMS}
+    for a in assigned:
+        if a in counts:
+            counts[a] += 1
+    return min(EXPERIMENT_ARMS, key=lambda a: (counts[a], EXPERIMENT_ARMS.index(a)))
+
+
+def validate_tight(story: dict):
+    """The tight arm only means something if the model actually wrote it tight."""
+    import re
+    sentences = [x for x in re.split(r"(?<=[.!?])\s+", story["story"].strip()) if x]
+    if len(sentences[0].split()) > 14:
+        raise ValueError(f"tight opening is {len(sentences[0].split())} words, want <=12")
+    if len(sentences[-1].split()) > 12:
+        raise ValueError(f"tight CTA is {len(sentences[-1].split())} words, want <=10")
+
+
 def pick_theme(state_rows: list, variant: str | None = None) -> str:
     """Least-used theme. Scoped per variant when given, so a long video does not
     starve the short rotation of a theme (different audiences, independent cycles)."""
@@ -594,8 +640,16 @@ def main():
     # and every run sees None, picks the first style, and "rotation" becomes a
     # single CTA forever.
     state_rows = sb.table("story_state").select(
-        "variant,theme,hook,fingerprint,curve,cta_style"
+        "variant,theme,hook,fingerprint,curve,cta_style,experiment_arm"
     ).execute().data
+    # Arms already handed out: published stories plus those still queued.
+    assigned_arms = [r.get("experiment_arm") for r in state_rows
+                     if (r.get("variant") or "short") == variant]
+    assigned_arms += [
+        (r.get("payload") or {}).get("experiment_arm") for r in
+        sb.table("story_queue").select("payload").is_("claimed_at", "null")
+        .eq("variant", variant).execute().data
+    ]
 
     written = 0
     attempts = 0
@@ -603,11 +657,13 @@ def main():
         attempts += 1
         theme = pick_theme(state_rows, variant=variant)
         cta_style = pick_cta_style(state_rows, variant=variant)
+        arm = pick_experiment_arm(assigned_arms)
         recent = [r for r in state_rows if r.get("theme") == theme][-25:]
         user_prompt = (
             f"Theme lock for this spin-off: \"{theme}\".\n\n"
             f"CTA INSTRUCTION (cta_style token: {cta_style})\n"
             f"{CTA_STYLES[cta_style]}\n\n"
+            + (f"{TIGHT_INSTRUCTION}\n\n" if arm == "tight" else "") +
             f"Recent entries in this theme batch (avoid repeating fingerprints/hooks/curves):\n"
             f"{json.dumps(recent, ensure_ascii=False)}\n\n"
             f"Generate one new story now."
@@ -616,15 +672,24 @@ def main():
             story = call_groq(system_prompt, user_prompt)
             validate_story(story)
             validate_cta(story, cta_style)
+            if arm == "tight":
+                validate_tight(story)
+            # Stamped by us, not the model: the arm is the experiment's key and
+            # must not depend on the model echoing it back correctly.
+            story["experiment_arm"] = arm
             sb.table("story_queue").insert({
                 "variant": variant,
                 "theme": story["theme"], "title": story["title"], "payload": story,
             }).execute()
             state_rows.append({"variant": variant, "theme": story["theme"],
                                 "hook": story["dna"].get("hook"),
-                                "fingerprint": story["dna"].get("fingerprint"), "curve": story["curve"]})
+                                "fingerprint": story["dna"].get("fingerprint"), "curve": story["curve"],
+                                # Without these, a run queuing several stories
+                                # rotates neither the CTA nor the arm.
+                                "cta_style": cta_style, "experiment_arm": arm})
+            assigned_arms.append(arm)
             written += 1
-            print(f"[generate] Queued: {story['title']} ({story['theme']})")
+            print(f"[generate] Queued: {story['title']} ({story['theme']}, {arm}, {cta_style})")
         except Exception as e:
             print(f"[generate] Attempt failed, retrying: {e}")
 
