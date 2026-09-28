@@ -152,8 +152,13 @@ REQUIRED_KIT_KEYS_LONG = ["youtube_title", "youtube_description", "youtube_tags"
 # `brief` names the logical beat in the plan that this request draws from;
 # `part` positions it within that beat.
 LONG_BEATS = {
-    "hook":      {"target":  96, "min":  67, "max": 125, "brief": "hook",     "part": None},
-    "lock_in":   {"target":  96, "min":  67, "max": 125, "brief": "lock_in",  "part": None},
+    # Hook and lock-in were 96 words each -- nearly a minute before the story
+    # moved -- and long-form viewers were leaving within seconds (median watch
+    # under a minute of ~9). Cut to ~13s and ~18s so the conflict is on screen
+    # almost immediately. The ~87 words freed stay out: the total still sits
+    # inside LONG_TOTAL_MIN..MAX.
+    "hook":      {"target":  45, "min":  32, "max":  60, "brief": "hook",     "part": None},
+    "lock_in":   {"target":  60, "min":  42, "max":  80, "brief": "lock_in",  "part": None},
     "body_1a":   {"target": 163, "min": 114, "max": 212, "brief": "body_1",   "part": "first"},
     "body_1b":   {"target": 163, "min": 114, "max": 212, "brief": "body_1",   "part": "second"},
     "rehook_1":  {"target":  62, "min":  43, "max":  81, "brief": "rehook_1", "part": None},
@@ -368,6 +373,11 @@ def _validate_long(story: dict):
             f"story word count {total} outside {LONG_TOTAL_MIN}-{LONG_TOTAL_MAX} range"
         )
 
+    import re as _re
+    hook_first = _re.split(r"(?<=[.!?])\s+", str(sections.get("hook", "")).strip())[0]
+    if len(hook_first.split()) > 14:
+        raise ValueError(f"hook opens with a {len(hook_first.split())}-word sentence; "
+                         f"the first line must land the conflict in 12 words or fewer")
     if "subscribe" not in str(sections["cta"]).lower():
         raise ValueError("cta section must contain an explicit 'Subscribe' call-out")
 

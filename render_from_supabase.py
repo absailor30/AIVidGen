@@ -128,13 +128,13 @@ VARIANT_PROFILES = {
         # ~200 separate subclip encodes and only ~60s of unique footage; at 8s
         # it is ~75 encodes and each Pexels hit contributes 8s instead of 3s.
         "clip_duration": 8,
-        # Off deliberately. At ~250 cues the renderer builds every caption as a
-        # TextClip and composites them all at once, and its subtitle builder is
-        # all-or-nothing: one line mismatch writes NO file and only logs a
-        # warning, producing a silently caption-less video. YouTube
-        # auto-captions cover long-form, and unlike Shorts there is no platform
-        # UI to dodge. Proper uploaded captions are the v2 route.
-        "subtitle_enabled": False,
+        # On. It was off because a 2,000-word script is one long caption
+        # match: a single mismatched line makes the builder write no file at
+        # all. That failure is graceful -- the video still renders and posts,
+        # just without captions -- so the cost of trying is small, and
+        # captionless long-form was losing viewers within seconds. Whether a
+        # given video got captions is printed by render_video().
+        "subtitle_enabled": True,
         "font_size": 64,
         "subtitle_position": "bottom",
         "custom_position": 88.0,
@@ -306,6 +306,16 @@ def render_video(story: dict, variant: str = "short") -> str | None:
     if result.get("state") != 1:  # TASK_STATE_COMPLETE
         print(f"[render] Task did not complete successfully: state={result.get('state')}")
         return None
+
+    if p["subtitle_enabled"]:
+        # The caption builder fails silently (a logged warning, no file) when
+        # it cannot match the narration line for line, and the video renders
+        # anyway. Say so plainly, so a run of captionless videos is visible.
+        if result.get("subtitle_path"):
+            print("[render] Captions: burned in.")
+        else:
+            print("[render] Captions: MISSING -- the caption file could not be "
+                  "matched to the narration; this video has no captions.")
 
     # "videos" (final_video_paths) is the actual final output — subtitles
     # burned in, audio attached, via generate_video(). "combined_videos" is
