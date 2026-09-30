@@ -84,6 +84,12 @@ VOICE_SPEED = 1.4
 #
 # Note that the schema default for bgm_type is also "random", so None means
 # music, not silence. To turn music off, set "" explicitly.
+# Background music level, as a multiplier on the track (1.0 = as mastered).
+# The schema default is 0.2; 0.2 was judged still too present under the
+# narration on the first Audio Library render (2026-09-28), so it is halved.
+# The tracks are mostly NEFFEX rock/hip-hop, mastered loud.
+BGM_VOLUME = 0.1
+
 VARIANT_PROFILES = {
     "short": {
         "aspect": "9:16",
@@ -253,6 +259,8 @@ def build_payload(story: dict, variant: str = "short",
         payload["n_threads"] = p["n_threads"]
     if p["bgm_type"] is not None:
         payload["bgm_type"] = p["bgm_type"]
+    if p["bgm_type"]:
+        payload["bgm_volume"] = BGM_VOLUME
     if image_paths:
         # "local" makes task.py read video_materials instead of searching
         # Pexels; the key stays in the payload but goes unused.
