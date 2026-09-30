@@ -35,7 +35,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Best effort, as in story_render_long.yml. On 2026-09-30 Groq's daily
+      # token allowance ran out and this step retried until the job hit its
+      # timeout, so a Short that was already queued never rendered. If
+      # generation fails the render still runs from the queue; if the queue
+      # is truly empty, the renderer exits non-zero and the alert fires.
       - name: Top up story queue if running low
+        continue-on-error: true
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}

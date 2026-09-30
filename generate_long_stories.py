@@ -39,6 +39,7 @@ from generate_stories_cloud import (
     LONG_TOTAL_MIN,
     QUEUE_TARGETS,
     THEMES,
+    GroqQuotaExhausted,
     call_groq,
     pick_theme,
     validate_story,
@@ -290,6 +291,8 @@ def generate_long_story(theme: str, recent: list) -> dict:
                 previous_tail = _tail(text)
                 print(f"[long]   {name}: {n} words (target {spec['target']})")
                 break
+            except GroqQuotaExhausted:
+                raise   # retrying a beat cannot help; see the story loop
             except Exception as e:
                 last_error = e
                 print(f"[long]   {name} attempt {attempt + 1} failed: {e}")
@@ -329,8 +332,9 @@ def main():
         ).execute().data
 
     written = 0
+    quota_out = False
     for _ in range(STORIES_PER_RUN):
-        if unclaimed + written >= target:
+        if unclaimed + written >= target or quota_out:
             break
         theme = pick_theme(state_rows, variant=VARIANT) if state_rows else THEMES[0]
         recent = [
@@ -342,6 +346,12 @@ def main():
             try:
                 story = generate_long_story(theme, recent)
                 validate_story(story, variant=VARIANT)
+            except GroqQuotaExhausted as e:
+                # Stop outright. The queue buffer covers tonight's render, and
+                # more attempts would only fail the same way.
+                print(f"[long] {e}")
+                quota_out = True
+                break
             except Exception as e:
                 print(f"[long] Story attempt {attempt + 1} failed: {e}")
                 continue

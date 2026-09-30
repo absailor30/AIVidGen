@@ -79,16 +79,58 @@ VOICE_SPEED = 1.4
 # bring the claims back.
 #
 # Volume does not protect against claims -- Content ID matches the fingerprint
-# at any level; the old tracks were claimed at the default 0.2. Volume here is
-# purely about sitting under the narration.
+# at any level; the old tracks were claimed at the default 0.2. Level here is
+# purely about sitting under the narration: see BGM_TARGET_LUFS below.
 #
 # Note that the schema default for bgm_type is also "random", so None means
 # music, not silence. To turn music off, set "" explicitly.
-# Background music level, as a multiplier on the track (1.0 = as mastered).
-# The schema default is 0.2; 0.2 was judged still too present under the
-# narration on the first Audio Library render (2026-09-28), so it is halved.
-# The tracks are mostly NEFFEX rock/hip-hop, mastered loud.
-BGM_VOLUME = 0.1
+# Background music loudness, as a TARGET rather than a multiplier.
+#
+# MoneyPrinter's bgm_volume multiplies the track as mastered, and the Audio
+# Library tracks differ by ~8 dB: the NEFFEX tracks measure about -8 LUFS
+# (far louder than the -14 streaming norm), the Green Orbs lullabies about
+# -15. A fixed 0.1 left NEFFEX near -28 LUFS -- still loud under the voice,
+# as the 2026-09-30 test Short showed -- and the lullabies nearly inaudible.
+# So the chosen track is measured at render time and scaled to this level.
+# Lower is quieter; move it in steps of 2-3 dB. -34 was judged a little too
+# quiet on the 2026-09-30 test Short (v9HRHrISOZ8); -28 (the old fixed 0.1
+# on NEFFEX) too loud.
+BGM_TARGET_LUFS = -32.0
+
+# Used only if measuring the track fails: quiet enough for the loudest track.
+BGM_FALLBACK_VOLUME = 0.05
+
+
+def _pick_bgm() -> tuple[str, float] | None:
+    """Choose a track and the gain that brings it to BGM_TARGET_LUFS.
+
+    Returns (filename relative to resource/songs, volume multiplier), or None
+    if the folder has no tracks. Picking here rather than leaving it to
+    MoneyPrinter's bgm_type="random" is what lets the gain match the track.
+    """
+    import glob, random, re, subprocess
+    song_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resource", "songs")
+    tracks = sorted(glob.glob(os.path.join(song_dir, "*.mp3")))
+    if not tracks:
+        return None
+    track = random.choice(tracks)
+    name = os.path.basename(track)
+    try:
+        out = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostats", "-i", track,
+             "-af", "ebur128=framelog=quiet", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=120,
+        ).stderr
+        # The summary block ends with "Integrated loudness: ... I: -8.1 LUFS".
+        lufs = float(re.findall(r"I:\s*(-?[\d.]+)\s*LUFS", out)[-1])
+        gain = round(10 ** ((BGM_TARGET_LUFS - lufs) / 20), 4)
+        print(f"[render] Music: {name} ({lufs:.1f} LUFS) -> gain {gain} "
+              f"for {BGM_TARGET_LUFS:.0f} LUFS")
+    except Exception as e:
+        gain = BGM_FALLBACK_VOLUME
+        print(f"[render] Music: {name}, loudness unmeasured ({str(e)[:80]}); "
+              f"using fallback gain {gain}")
+    return name, gain
 
 VARIANT_PROFILES = {
     "short": {
@@ -260,7 +302,11 @@ def build_payload(story: dict, variant: str = "short",
     if p["bgm_type"] is not None:
         payload["bgm_type"] = p["bgm_type"]
     if p["bgm_type"]:
-        payload["bgm_volume"] = BGM_VOLUME
+        picked = _pick_bgm()
+        if picked:
+            # bgm_file wins over bgm_type="random" inside get_bgm_file(), and
+            # is resolved within resource/songs, so a bare filename is right.
+            payload["bgm_file"], payload["bgm_volume"] = picked
     if image_paths:
         # "local" makes task.py read video_materials instead of searching
         # Pexels; the key stays in the payload but goes unused.

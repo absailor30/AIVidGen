@@ -406,6 +406,29 @@ def _is_model_gone(resp) -> bool:
     return False
 
 
+class GroqQuotaExhausted(RuntimeError):
+    """Every model in the chain is out of its daily (or per-request) allowance."""
+
+
+def _is_quota_exhausted(resp) -> bool:
+    """A 429 that no amount of waiting inside this job will clear.
+
+    Two shapes, both seen on 2026-09-30 when a Shorts run sat for its whole
+    40-minute budget retrying and was cancelled before it could render:
+      * "tokens per day (TPD)" -- the free tier's 200k daily allowance is
+        spent; the reset is ~30 minutes to hours away.
+      * "Request too large ... (OTPM)" -- the request alone exceeds the
+        model's per-minute output cap, so it can never succeed on that model.
+    The backoff below was built for per-minute limits, which clear in under a
+    minute. Against these it just burns the job's time. Each Groq model has its
+    own allowance, so the right move is the next model, not a wait.
+    """
+    if resp.status_code != 429:
+        return False
+    body = (resp.text or "").lower()
+    return ("per day" in body) or ("request too large" in body)
+
+
 def call_groq(system: str, user: str) -> dict:
     global _active_model
 
@@ -414,6 +437,7 @@ def call_groq(system: str, user: str) -> dict:
         m for m in GROQ_MODELS if m != _active_model
     ]
     resp = None
+    quota_hit = []
     for model in candidates:
         # Retry on 429 (rate limit), honoring the reset window the API reports.
         for attempt in range(GROQ_429_ATTEMPTS):
@@ -428,6 +452,10 @@ def call_groq(system: str, user: str) -> dict:
                 },
                 timeout=60,
             )
+            if _is_quota_exhausted(resp):
+                print(f"[generate] {model} is out of quota, not waiting: "
+                      f"{(resp.text or '').strip()[:200]}")
+                break
             if resp.status_code == 429 and attempt < GROQ_429_ATTEMPTS - 1:
                 wait = _parse_retry_seconds(resp)
                 # Print the body. A per-minute token cap and an exhausted daily
@@ -443,6 +471,9 @@ def call_groq(system: str, user: str) -> dict:
         if _is_model_gone(resp):
             print(f"[generate] Model '{model}' unavailable ({resp.status_code}), trying next.")
             continue
+        if _is_quota_exhausted(resp):
+            quota_hit.append(model)
+            continue
 
         resp.raise_for_status()
         if _active_model != model:
@@ -450,6 +481,12 @@ def call_groq(system: str, user: str) -> dict:
             _active_model = model
         break
     else:
+        if quota_hit:
+            raise GroqQuotaExhausted(
+                f"Groq quota exhausted on {quota_hit}; other models "
+                f"{[m for m in candidates if m not in quota_hit]} were unavailable. "
+                f"Generation stops for this run; queued stories still render."
+            )
         raise RuntimeError(
             f"No usable Groq model. Tried {GROQ_MODELS}; all returned model-not-found. "
             f"Check https://console.groq.com/docs/models and set the GROQ_MODEL secret."
@@ -700,6 +737,11 @@ def main():
             assigned_arms.append(arm)
             written += 1
             print(f"[generate] Queued: {story['title']} ({story['theme']}, {arm}, {cta_style})")
+        except GroqQuotaExhausted as e:
+            # Every further attempt would fail the same way and spend no
+            # tokens, only time. Stop, and let the render use the queue.
+            print(f"[generate] {e}")
+            break
         except Exception as e:
             print(f"[generate] Attempt failed, retrying: {e}")
 
