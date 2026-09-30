@@ -92,8 +92,10 @@ VOICE_SPEED = 1.4
 # -15. A fixed 0.1 left NEFFEX near -28 LUFS -- still loud under the voice,
 # as the 2026-09-30 test Short showed -- and the lullabies nearly inaudible.
 # So the chosen track is measured at render time and scaled to this level.
-# Lower is quieter; move it in steps of 2-3 dB.
-BGM_TARGET_LUFS = -34.0
+# Lower is quieter; move it in steps of 2-3 dB. -34 was judged a little too
+# quiet on the 2026-09-30 test Short (v9HRHrISOZ8); -28 (the old fixed 0.1
+# on NEFFEX) too loud.
+BGM_TARGET_LUFS = -32.0
 
 # Used only if measuring the track fails: quiet enough for the loudest track.
 BGM_FALLBACK_VOLUME = 0.05
