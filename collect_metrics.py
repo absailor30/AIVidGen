@@ -245,6 +245,128 @@ def collect_curves(sb, creds) -> tuple[int, int, int]:
     return captured, empty, failed
 
 
+# --- Instagram ---------------------------------------------------------------
+IG_GRAPH = "https://graph.instagram.com"
+
+# Reels this young are snapshotted daily. Older ones barely move, and keeping
+# the call count down matters: the Instagram API's per-account hourly limit is
+# far smaller than YouTube's quota.
+IG_MAX_AGE_DAYS = 30
+
+# Requested if the account is allowed them. Insights availability depends on
+# account size and Meta's rollouts, and the names have changed before ("plays"
+# became "views" in 2025), so none of these is assumed: each is probed once per
+# run and only the ones Meta accepts are used for the rest.
+IG_INSIGHT_METRICS = ["views", "reach", "shares", "saved", "total_interactions",
+                      "ig_reels_avg_watch_time", "ig_reels_video_view_total_time"]
+
+
+def ig_token(sb) -> str | None:
+    """Same rule as the renderer: the auto-refreshed token if unexpired, else env."""
+    env = (os.environ.get("IG_ACCESS_TOKEN") or "").strip() or None
+    try:
+        rows = sb.table("ig_token").select("access_token,expires_at").eq("id", 1).execute().data
+    except Exception as e:
+        print(f"[metrics] IG: could not read stored token ({str(e)[:80]}); using env.")
+        return env
+    if rows:
+        exp = datetime.fromisoformat(rows[0]["expires_at"].replace("Z", "+00:00"))
+        if exp > datetime.now(timezone.utc):
+            return rows[0]["access_token"]
+    return env
+
+
+def _ig_get(path: str, token: str, **params) -> dict:
+    import requests
+    resp = requests.get(f"{IG_GRAPH}/{path}", params={**params, "access_token": token}, timeout=30)
+    body = resp.json() if resp.content else {}
+    if not resp.ok:
+        err = body.get("error", {}) if isinstance(body, dict) else {}
+        raise RuntimeError(f"HTTP {resp.status_code} code {err.get('code')}: "
+                           f"{str(err.get('message') or resp.text)[:160]}")
+    return body
+
+
+def _is_rate_limited(e: Exception) -> bool:
+    return any(f"code {c}:" in str(e) for c in (4, 17, 32, 613))
+
+
+def probe_ig_metrics(media_id: str, token: str) -> list[str]:
+    """Which insight metrics this account may read, tested one at a time.
+
+    One request per metric, once per run. Asking for all of them together
+    fails the whole request if Meta rejects any single name, which would lose
+    the ones that do work.
+    """
+    ok = []
+    for m in IG_INSIGHT_METRICS:
+        try:
+            _ig_get(f"{media_id}/insights", token, metric=m)
+            ok.append(m)
+        except Exception as e:
+            print(f"[metrics] IG: insight '{m}' unavailable ({str(e)[:110]})")
+            if _is_rate_limited(e):
+                break
+    print(f"[metrics] IG: usable insights: {ok or 'none -- likes/comments only'}")
+    return ok
+
+
+def collect_instagram(sb) -> tuple[int, int]:
+    """Snapshot recent Reels into ig_metrics. Returns (written, failed).
+
+    Never raises: Instagram is the optional half of this job. A missing token,
+    an insights restriction or a rate limit costs Instagram numbers, not the
+    YouTube snapshot written before this runs.
+    """
+    token = ig_token(sb)
+    if not token:
+        print("[metrics] IG: no token; skipping Instagram.")
+        return 0, 0
+    now = datetime.now(timezone.utc)
+    rows = (sb.table("story_state").select("instagram_id,created_at")
+            .not_.is_("instagram_id", "null").execute().data)
+    ids = []
+    for r in rows:
+        created = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00"))
+        if r["instagram_id"] and (now - created).days <= IG_MAX_AGE_DAYS:
+            ids.append(r["instagram_id"])
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        print("[metrics] IG: no recent Reels.")
+        return 0, 0
+
+    metrics = probe_ig_metrics(ids[0], token)
+    fields = "like_count,comments_count"
+    if metrics:
+        fields += f",insights.metric({','.join(metrics)})"
+
+    today = date.today().isoformat()
+    out, failed = [], 0
+    for mid in ids:
+        try:
+            d = _ig_get(mid, token, fields=fields)
+        except Exception as e:
+            failed += 1
+            print(f"[metrics] IG: {mid} failed ({str(e)[:110]})")
+            if _is_rate_limited(e):
+                print("[metrics] IG: rate limited; stopping, the rest follow tomorrow.")
+                break
+            continue
+        ins = {}
+        for item in (d.get("insights") or {}).get("data", []):
+            vals = item.get("values") or [{}]
+            ins[item["name"]] = vals[0].get("value")
+        out.append({"instagram_id": mid, "collected_on": today,
+                    "likes": d.get("like_count"), "comments": d.get("comments_count"),
+                    "metrics": ins})
+    for i in range(0, len(out), 100):
+        sb.table("ig_metrics").upsert(out[i:i + 100],
+                                      on_conflict="instagram_id,collected_on").execute()
+    print(f"[metrics] IG: wrote {len(out)} Reel snapshots, {failed} failed, "
+          f"of {len(ids)} under {IG_MAX_AGE_DAYS} days old.")
+    return len(out), failed
+
+
 def main():
     sb = supabase_client()
     creds = youtube_credentials()
@@ -288,6 +410,7 @@ def main():
             rows[i:i + 100], on_conflict="youtube_id,collected_on").execute()
     print(f"[metrics] Wrote {len(rows)} snapshots for {today}.")
 
+    curves_all_failed = False
     # Curves need the same Analytics scope as the averages. Without it there
     # is nothing to attempt, and the scope message above already said so.
     if ANALYTICS_SCOPE in scopes:
@@ -296,8 +419,17 @@ def main():
         # collector that attempts curves every day and silently lands none is
         # exactly the kind of quiet breakage this job exists to prevent.
         if failed and not captured and not empty:
-            sys.exit(f"[metrics] Every retention curve request failed ({failed}). "
-                     f"The daily snapshot above was still written.")
+            curves_all_failed = True
+
+    # Instagram last, so nothing above can be lost to it.
+    try:
+        collect_instagram(sb)
+    except Exception as e:
+        print(f"[metrics] IG: collection crashed ({str(e)[:160]}); YouTube data above is saved.")
+
+    if ANALYTICS_SCOPE in scopes and curves_all_failed:
+        sys.exit("[metrics] Every retention curve request failed. "
+                 "The daily snapshot above was still written.")
 
 
 if __name__ == "__main__":
