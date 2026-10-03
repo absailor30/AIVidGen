@@ -1,0 +1,100 @@
+name: Twisty! StoryVault — Instagram trial Reel
+
+# One trial Reel a day: a normal Short, shown by Instagram to NON-followers
+# only, with SS_PERFORMANCE so Instagram shares it to followers itself if it
+# does well. Instagram-only -- see VARIANT_PROFILES["trial"].
+#
+# Its own workflow file so it holds its own lock and never blocks a Shorts
+# slot. Scheduled on GitHub's cron, which runs 2-3 hours late on this repo;
+# the exact hour does not matter for a trial.
+
+on:
+  schedule:
+    - cron: "0 16 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    env:
+      # Python block-buffers stdout when piped into tee, so on a timeout kill
+      # the buffer is lost — run #197 uploaded to YouTube successfully and the
+      # "[main] Uploaded: ..." line never reached the log. That also silently
+      # truncates the tail the failure alert quotes, which is the whole point
+      # of capturing it.
+      PYTHONUNBUFFERED: "1"
+      # Selects the trial profile: the Shorts render, posted to Instagram
+      # only, as a trial Reel (non-followers first).
+      STORY_VARIANT: "trial"
+    # Generation + render + upload needs more than 20min in the worst case:
+    # run #197 rendered a 107s video successfully at 18:13:32 and was killed
+    # at 18:15:05 partway through the upload. Refilling an empty queue can
+    # alone take 7min against Groq's free-tier rate limits, and the render
+    # another 10. 40 leaves headroom without letting a hung job idle for long.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Best effort, as in story_render_long.yml. On 2026-09-30 Groq's daily
+      # token allowance ran out and this step retried until the job hit its
+      # timeout, so a Short that was already queued never rendered. If
+      # generation fails the render still runs from the queue; if the queue
+      # is truly empty, the renderer exits non-zero and the alert fires.
+      - name: Top up story queue if running low
+        continue-on-error: true
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          # Optional: pin a specific Groq model. Accepted as either a repo
+          # variable or a secret (Settings > Secrets and variables > Actions),
+          # since neither is sensitive and it is easy to add under the wrong
+          # tab. Unset lets generate_stories_cloud.py walk its fallback chain.
+          GROQ_MODEL: ${{ vars.GROQ_MODEL || secrets.GROQ_MODEL }}
+          # Optional: raise if stories start getting clipped mid-sentence.
+          # Variable or secret, as above. Unset means the 4000 default in
+          # generate_stories_cloud.py.
+          GROQ_MAX_TOKENS: ${{ vars.GROQ_MAX_TOKENS || secrets.GROQ_MAX_TOKENS }}
+        shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
+        run: python generate_stories_cloud.py 2>&1 | tee -a /tmp/pipeline.log
+
+      - name: Render + upload next queued story
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
+        run: python render_from_supabase.py 2>&1 | tee -a /tmp/pipeline.log
+
+      # Send the actual error, not just a link. A bare "it failed" meant every
+      # past alert required opening Actions to learn anything; the tail of the
+      # log is usually enough to tell a retired model from a real bug.
+      # Send the actual error, not just a link. A bare "it failed" meant every
+      # past alert required opening Actions to learn anything; the tail of the
+      # log is usually enough to tell a retired model from a real bug.
+      - name: Notify Telegram on failure
+        if: failure()
+        shell: bash
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          TAIL=$(tail -c 2000 /tmp/pipeline.log 2>/dev/null || true)
+          [ -n "$TAIL" ] || TAIL="(no output captured - the job died before the scripts ran)"
+          MSG=$(printf 'Twisty StoryVault TRIAL REEL FAILED (run #%s)\n\n%s\n\n%s\n\nTry /logs for detail, or /fix to auto-repair a retired model.' \
+            "$RUN_NUMBER" "$TAIL" "$RUN_URL")
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode text="$MSG" > /dev/null

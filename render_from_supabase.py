@@ -25,6 +25,7 @@ deleted immediately after. Nothing is ever permanently publicly accessible.
 """
 
 import base64
+import json
 import os
 import pickle
 import random
@@ -146,6 +147,8 @@ VARIANT_PROFILES = {
         "bgm_type": "random",       # a licensed track -- see NOTE below
         "edge_tts_timeout": None,   # 30s default is plenty for ~80s of audio
         "instagram": True,
+        "youtube": True,
+        "ig_trial": None,
         "image_mode": False,
     },
     # Opt-in experiment: same 9:16 Short, but the backdrop is generated images
@@ -167,6 +170,8 @@ VARIANT_PROFILES = {
         "bgm_type": "random",       # a licensed track -- see NOTE below
         "edge_tts_timeout": None,
         "instagram": True,
+        "youtube": True,
+        "ig_trial": None,
         "image_mode": True,
     },
     "long": {
@@ -193,8 +198,22 @@ VARIANT_PROFILES = {
         # default kills a 10-minute narration outright.
         "edge_tts_timeout": 900,
         "instagram": False,
+        "youtube": True,
+        "ig_trial": None,
         "image_mode": False,
     },
+}
+
+
+# Trial Reels: identical Shorts, shown on Instagram to NON-followers only, so a
+# format that misses never reaches the people who already follow. With
+# SS_PERFORMANCE Instagram shares a trial to followers itself when it does
+# well. Instagram-only on purpose: also posting it to YouTube would put every
+# trial in front of the YouTube audience and defeat the point.
+VARIANT_PROFILES["trial"] = {
+    **VARIANT_PROFILES["short"],
+    "youtube": False,
+    "ig_trial": "SS_PERFORMANCE",
 }
 
 
@@ -621,7 +640,8 @@ def _ig_container_reason(creation_id: str, token: str) -> str:
         return f"reason lookup failed: {str(e)[:120]}"
 
 
-def _ig_create_and_wait(ig_user_id: str, video_url: str, caption: str, token: str) -> str:
+def _ig_create_and_wait(ig_user_id: str, video_url: str, caption: str, token: str,
+                        trial: str | None = None) -> str:
     """Create a Reel container and poll it to FINISHED. Returns the creation_id.
 
     Raises _ContainerError when Meta rejects the container, so the caller can
@@ -634,6 +654,8 @@ def _ig_create_and_wait(ig_user_id: str, video_url: str, caption: str, token: st
             "video_url": video_url,
             "caption": caption[:2200],
             "access_token": token,
+            # Present only for trial Reels. Meta takes it as a JSON object.
+            **({"trial_params": json.dumps({"graduation_strategy": trial})} if trial else {}),
         },
         timeout=60,
     ))
@@ -657,7 +679,8 @@ def _ig_create_and_wait(ig_user_id: str, video_url: str, caption: str, token: st
     raise TimeoutError("Instagram container never finished processing")
 
 
-def upload_to_instagram(video_url: str, kit: dict, token: str) -> str | None:
+def upload_to_instagram(video_url: str, kit: dict, token: str,
+                        trial: str | None = None) -> str | None:
     """Publishes a Reel via the Instagram API (Instagram Login) using a temporary signed URL."""
     ig_user_id = os.environ["IG_USER_ID"]
 
@@ -678,7 +701,7 @@ def upload_to_instagram(video_url: str, kit: dict, token: str) -> str | None:
     last_error = None
     for container_attempt in range(2):
         try:
-            creation_id = _ig_create_and_wait(ig_user_id, video_url, caption, token)
+            creation_id = _ig_create_and_wait(ig_user_id, video_url, caption, token, trial)
             break
         except _ContainerError as e:
             last_error = e
@@ -729,22 +752,25 @@ def main():
         sys.exit(1)
 
     youtube_id = None
-    try:
-        youtube_id = upload_to_youtube(video_path, story["publishing_kit"])
-        print(f"[main] Uploaded: https://youtube.com/watch?v={youtube_id}")
-    except Exception as e:
-        print(f"[main] YouTube upload failed: {e}")
-        # YouTube is the primary destination — release the claim so the next
-        # run retries this story instead of silently marking it "rendered"
-        # with no video ever having gone live, and fail the job so the
-        # Telegram failure alert actually fires instead of a false-green run.
-        sb_retry(
-            "release claim (youtube failed)",
-            lambda: sb.table("story_queue")
-            .update({"error": f"youtube upload failed: {e}", "claimed_at": None})
-            .eq("id", row["id"]).execute(),
-        )
-        sys.exit(1)
+    if not p["youtube"]:
+        print(f"[main] Skipping YouTube -- {variant} is Instagram-only.")
+    else:
+        try:
+            youtube_id = upload_to_youtube(video_path, story["publishing_kit"])
+            print(f"[main] Uploaded: https://youtube.com/watch?v={youtube_id}")
+        except Exception as e:
+            print(f"[main] YouTube upload failed: {e}")
+            # YouTube is the primary destination — release the claim so the next
+            # run retries this story instead of silently marking it "rendered"
+            # with no video ever having gone live, and fail the job so the
+            # Telegram failure alert actually fires instead of a false-green run.
+            sb_retry(
+                "release claim (youtube failed)",
+                lambda: sb.table("story_queue")
+                .update({"error": f"youtube upload failed: {e}", "claimed_at": None})
+                .eq("id", row["id"]).execute(),
+            )
+            sys.exit(1)
 
     instagram_id = None
     instagram_error = None
@@ -757,7 +783,8 @@ def main():
         storage_path = None
         try:
             storage_path, signed_url = get_signed_video_url(sb, video_path, row["id"])
-            instagram_id = upload_to_instagram(signed_url, story["publishing_kit"], ig_token)
+            instagram_id = upload_to_instagram(signed_url, story["publishing_kit"],
+                                               ig_token, trial=p["ig_trial"])
             print(f"[main] Posted to Instagram: media id {instagram_id}")
         except Exception as e:
             # Remembered, not swallowed. The state write below still happens so
@@ -771,6 +798,18 @@ def main():
                 delete_from_storage(sb, storage_path)
     else:
         print("[main] Skipping Instagram — no usable token, or IG_USER_ID not set.")
+
+    if not p["youtube"] and not instagram_id:
+        # Instagram is this lane's only destination, so a failure here is a
+        # failed post, not a partial one: release the story for the next run.
+        reason = instagram_error or "no usable Instagram token or IG_USER_ID"
+        sb_retry(
+            "release claim (instagram failed)",
+            lambda: sb.table("story_queue")
+            .update({"error": f"instagram: {reason}", "claimed_at": None})
+            .eq("id", row["id"]).execute(),
+        )
+        sys.exit(f"[main] {variant}: Instagram did not publish ({reason}); story released.")
 
     dna = story["dna"]
     # Everything below is bookkeeping: the video is already live on YouTube.
