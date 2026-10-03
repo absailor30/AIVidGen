@@ -64,7 +64,8 @@ MAX_RETRY_WAIT = 120.0
 # so the buffer is what makes an empty queue at render time survivable: run #14
 # died because generation and rendering shared a slot and Groq rate-limited the
 # 17 calls a long story needs, leaving nothing to post.
-QUEUE_TARGETS = {"short": 4, "long": 3, "illustrated": 2}
+# "trial" is the Instagram trial-Reel lane: one a day, so a small buffer.
+QUEUE_TARGETS = {"short": 4, "long": 3, "illustrated": 2, "trial": 2}
 QUEUE_TARGET = QUEUE_TARGETS["short"]   # back-compat for anything importing this
 
 # Compact system prompt. We deliberately do NOT send the full 28KB story bible
