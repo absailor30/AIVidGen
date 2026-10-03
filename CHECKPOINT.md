@@ -1,4 +1,4 @@
-# Pipeline checkpoint — 2026-09-19
+# Pipeline checkpoint — 2026-10-03
 
 A snapshot of how Twisty! StoryVault runs, why it is set up this way, and what
 is still open. Update this in place rather than adding dated copies.
@@ -11,6 +11,7 @@ is still open. Update this in place rather than adding dated copies.
 | `long` (generate) | 1x daily | Supabase queue | GitHub cron, `0 13 * * *` |
 | `long` (render) | 1x daily | YouTube only | GitHub cron, `30 19 * * *` |
 | `illustrated` | manual | YouTube (unlisted) | none — experiment |
+| character video | manual, once | not posted yet | none — experiment, RunPod pod |
 | metrics | 1x daily | Supabase | GitHub cron, `30 2 * * *` |
 | IG token refresh | weekly | Supabase | GitHub cron, `0 1 * * 1` |
 
@@ -66,6 +67,20 @@ how recently a video was posted — anything older than ~5 days barely moves.
   already live on YouTube — that is deliberate, so an Instagram or bookkeeping
   problem cannot pass silently. Read the log before assuming nothing posted.
 
+## Character video experiment
+
+One 72s story ("The Stolen Pitch") was made end to end with four consistent,
+recurring characters: refs from Flow (Nano Banana Pro), clips from WanGP +
+MiniMax H3 Ref2VA on a RunPod L40, narration and edit with edge-tts + ffmpeg.
+Everything needed to repeat it — prompts, pod scripts, `assemble.py`, timings,
+and what broke — is in `experiments/character_video/README.md`. It is not
+wired into any workflow and nothing from it has been posted.
+
+The load-bearing findings: two refs per character (close-up + full body) hold
+identity; parts must stay close-up/medium and ≤5s; the room image works best as
+a style reference rather than a frame to copy. An L40 is the cheapest pod that
+fits (needs ~67GB RAM, ~28GB VRAM); a story costs roughly $2–2.5 of pod time.
+
 ## Open items
 
 - Delete the Worker's `30 21 * * *` cron trigger in the Cloudflare dashboard.
@@ -78,3 +93,6 @@ how recently a video was posted — anything older than ~5 days barely moves.
 - The illustrated lane has no schedule and posts unlisted. Give it a cron only
   once the look has been judged and its `story_metrics` rows can be compared
   against the short lane.
+- Character video: verify WanGP can run headless before designing the automated
+  lane; until output quality is consistent, any automated version needs a human
+  approval step before posting, and the AI-content labels on both platforms.
