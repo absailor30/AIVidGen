@@ -792,7 +792,8 @@ def main():
             # non-zero so the Telegram alert fires — an Instagram outage used
             # to be invisible, reported as a fully successful run.
             instagram_error = str(e)
-            print(f"[main] Instagram publish failed (YouTube post is live): {e}")
+            print(f"[main] Instagram publish failed"
+                  f"{' (YouTube post is live)' if youtube_id else ''}: {e}")
         finally:
             if storage_path:
                 delete_from_storage(sb, storage_path)
