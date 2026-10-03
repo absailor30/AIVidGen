@@ -40,18 +40,27 @@ Design rules (so MiniMax never mixes them up): every actor differs in **age, hai
 ### New (12)
 | # | Actor | Plays | Signature look |
 |---|---|---|---|
-| 1 | **Eleanor** (60) | controlling mother / mother-in-law | silver-streaked chin-length bob, pearl necklace, **cream** cardigan · formal: **emerald** dress |
-| 2 | **Richard** (64) | father / father-in-law / grandfather | bald, short grey beard, round tortoiseshell glasses, **brown tweed** blazer · formal: black tuxedo |
-| 3 | **Chloe** (26) | entitled sister, bridezilla, golden child | long strawberry-blonde waves, **pastel pink** blouse · formal: blush satin gown |
-| 4 | **Ethan** (32) | husband / fiancé / groom | short dark-brown hair, light stubble, **light-blue** oxford shirt · formal: **navy** wedding suit |
-| 5 | **Marcus** (36) | cheating husband, brother-in-law, smooth villain | Black man, short fade, full trimmed beard, **charcoal** henley · formal: charcoal suit, no tie |
-| 6 | **Priya** (28) | narrator #2: bride, daughter-in-law, tenant | South Asian, long straight black hair in a low ponytail, **lavender** blouse · formal: ivory wedding dress / gold-trim lehenga |
-| 7 | **Rose** (78) | grandmother, will-maker | short white curls, gold-rimmed glasses, **floral** cardigan, pearl earrings |
-| 8 | **Frank** (60) | landlord, greedy uncle | balding with comb-over, heavy build, **maroon** polo, gold chain |
-| 9 | **Jade** (27) | affair partner, scheming bridesmaid | East Asian, sleek black bob with blunt bangs, **teal** satin top |
-| 10 | **Tyler** (30) | entitled cousin / brother | slicked-back blond hair, smug grin, **white** quarter-zip · formal: loud **plaid** suit |
-| 11 | **Sam** (30) | best friend / loyal ally | short auburn pixie cut, freckles, **denim** shirt, small gold hoops |
-| 12 | **Linda** (57) | second mother / mother-in-law (wedding stories need two mums) | Black woman, short natural grey hair, gold earrings, **burgundy** blouse · formal: burgundy gown |
+| 1 | **Eleanor** (58) | controlling mother / mother-in-law | white, glamorous silver-blonde blowout bob, pearls, **cream** fitted sheath dress, nude block-heel pumps · formal: **emerald** gown |
+| 2 | **Richard** (62) | father / father-in-law | white, distinguished, salt-and-pepper hair, trimmed grey beard, **brown tweed** blazer · formal: black tuxedo |
+| 3 | **Chloe** (26) | entitled sister, bridezilla, golden child | white, long strawberry-blonde waves, **pastel pink** mini dress, strappy pink stiletto sandals · formal: blush satin gown |
+| 4 | **Ethan** (32) | husband / fiancé / groom | Latino, handsome, short dark wavy hair, light stubble, **light-blue** shirt + navy blazer · formal: **navy** wedding suit |
+| 5 | **Marcus** (36) | cheating husband, brother-in-law, smooth villain | Black, handsome, short fade, trimmed beard, **charcoal** suit, open collar · formal: charcoal tux |
+| 6 | **Priya** (28) | narrator #2: bride, daughter-in-law, tenant | South Asian, long glossy black hair, **lavender** wrap dress, gold strappy block heels · formal: ivory wedding dress / red-and-gold lehenga |
+| 7 | **Rose** (76) | grandmother, will-maker | white, elegant short white hair, gold-rimmed glasses, **floral** silk blouse, low kitten heels |
+| 8 | **Frank** (58) | landlord, greedy uncle | white, heavy build, slicked grey hair, smug, **maroon** shirt, gold chain (deliberately unappealing — the role needs it) |
+| 9 | **Jade** (27) | affair partner, scheming bridesmaid | East Asian, sleek black bob with bangs, **teal** satin slip dress, black pointed stilettos |
+| 10 | **Tyler** (30) | entitled cousin / brother | East Asian, handsome, styled undercut, smug grin, **white** knit polo + camel trousers · formal: loud **plaid** suit |
+| 11 | **Sam** (29) | best friend / loyal ally | Latina, wavy caramel-highlighted hair, **coral** wrap top, white jeans, tan wedge sandals |
+| 12 | **Linda** (55) | second mother / mother-in-law | Black, elegant, short natural grey hair, gold earrings, **burgundy** pencil dress, burgundy slingback heels · formal: burgundy gown |
+
+**Maya** keeps her white sneakers in the existing refs (the "normal girl" contrast to Vanessa). If you want her in heels too, make a `maya_formal` set (tan nude heels) rather than replacing her refs — the finished story depends on them.
+
+### Style rules
+- **Women:** attractive, glamorous, polished; heels in almost every look (stilettos, block heels, strappy sandals, slingbacks, wedges, kitten heels for the oldest), manicured almond nails, and a matching pedicure whenever toes show. Exceptions only when a scene calls for it (gym, bed, hospital).
+- **Men:** handsome, well-groomed, professional (blazers, suits, tailored shirts) unless the role needs otherwise (Frank, Leo).
+- **Everyone is clearly an adult** (youngest 24). Keep descriptions adult — no "girlish", "petite teen" or school wear.
+- **Platform-safe wardrobe:** dresses, skirts and heels are fine; no lingerie, swimwear or see-through outfits. Shorts with sexualised framing get limited reach or age-restricted, and that hits a channel posting daily.
+- **Feet and hands:** good-looking in shots where they matter to the story (heels walking away, nails tapping the desk). Don't add foot-focused shots for their own sake — on Shorts that pulls in an off-target audience and can get flagged.
 
 Coverage check — every top theme can be cast without duplicates:
 - **Wedding:** Priya (bride), Ethan (groom), Eleanor + Linda (mothers), Chloe (sister), Tyler (cousin), Richard (father)
@@ -64,7 +73,7 @@ Coverage check — every top theme can be cast without duplicates:
 
 ## 3. Flow production plan (Nano Banana Pro, free)
 
-Per actor: **1 base + 6 views = 7 images** (formal-outfit actors: +2 → 9). Total ≈ 100 images.
+Per actor: **1 base + 6 views (+ shoes and hands for women) = 7–9 images** (formal-outfit actors: +2 → 9). Total ≈ 100 images.
 
 **Step A — base full-body (text only, no reference).** Portrait 9:16. Template:
 ```
@@ -80,6 +89,8 @@ Generate 4, pick the best, save as `{actor}_ref`. Every other image is made **fr
 | `{actor}_profile` | …same… Close-up side profile, head turned fully to the right. … |
 | `{actor}_medium` | …same… Medium shot from the waist up, standing, facing camera, arms relaxed. … |
 | `{actor}_back` | …same… Full body seen from behind, walking away, back to camera. … |
+| `{actor}_shoes` | (women) …same… Close-up of her feet and shoes, standing on a light grey floor, showing the exact same heels [and pedicure]. Product-photo style. |
+| `{actor}_hands` | …same… Close-up of her hands resting together, showing the exact same manicure and rings. |
 | `{actor}_emote` | …same… Close-up head-and-shoulders, facing camera, [actor's signature emotion: smug / furious / shocked / tearful]. … |
 
 **Step C — formal outfit (actors marked "formal" only), attach `{actor}_ref`:**
@@ -88,28 +99,28 @@ Generate 4, pick the best, save as `{actor}_ref`. Every other image is made **fr
 
 ### Actor descriptions to paste into [ACTOR DESCRIPTION]
 
-1. **Eleanor:** Eleanor: a 60-year-old woman, silver-streaked chin-length straight bob, pale skin, thin lips, sharp disapproving eyes, pearl necklace, cream cable-knit cardigan over a white blouse, beige tailored trousers, low beige heels.
-2. **Richard:** Richard: a 64-year-old man, completely bald, short grey beard, round tortoiseshell glasses, kind but tired eyes, brown tweed blazer, white shirt, dark brown trousers, brown brogues.
-3. **Chloe:** Chloe: a 26-year-old woman, long wavy strawberry-blonde hair, fair skin, light freckles, glossy pink lips, pastel pink silk blouse, white high-waisted jeans, nude heels, small gold necklace.
-4. **Ethan:** Ethan: a 32-year-old man, short neat dark-brown hair, light stubble, hazel eyes, athletic build, light-blue oxford shirt with sleeves rolled up, khaki chinos, white sneakers.
-5. **Marcus:** Marcus: a 36-year-old Black man, short fade haircut, full neatly trimmed black beard, confident smile, tall, charcoal grey henley, dark jeans, black leather boots, black watch.
-6. **Priya:** Priya: a 28-year-old South Asian woman, long straight black hair in a low ponytail, warm brown skin, dark brown eyes, small gold nose stud, lavender blouse, white trousers, tan flats.
-7. **Rose:** Rose: a 78-year-old woman, short white curly hair, gold-rimmed glasses, gentle wrinkled face, floral print cardigan over a cream dress, pearl earrings, walking cane in one hand.
-8. **Frank:** Frank: a 60-year-old man, balding with a thin comb-over, heavy build, ruddy cheeks, smug half-smile, maroon polo shirt, thin gold chain, grey slacks, brown loafers.
-9. **Jade:** Jade: a 27-year-old East Asian woman, sleek black chin-length bob with blunt bangs, dark winged eyeliner, nude lips, teal satin camisole top, black tailored trousers, black heels.
-10. **Tyler:** Tyler: a 30-year-old man, slicked-back blond hair, clean-shaven, smug grin, white quarter-zip pullover, navy chinos, brown loafers, expensive silver watch.
-11. **Sam:** Sam: a 30-year-old woman, short auburn pixie cut, freckles, warm friendly smile, light denim shirt with rolled sleeves, black jeans, white sneakers, small gold hoop earrings.
-12. **Linda:** Linda: a 57-year-old Black woman, short natural grey hair, elegant, gold drop earrings, burgundy silk blouse, black tailored trousers, black low heels.
+1. **Eleanor:** Eleanor: a glamorous 58-year-old white woman, silver-blonde blowout bob, striking cheekbones, sharp disapproving eyes, perfect makeup, pearl necklace, fitted cream sheath dress, nude manicured nails, nude block-heel pumps.
+2. **Richard:** Richard: a distinguished, handsome 62-year-old white man, salt-and-pepper hair neatly combed back, trimmed grey beard, warm eyes, brown tweed blazer, crisp white shirt, dark trousers, polished brown brogues.
+3. **Chloe:** Chloe: a gorgeous 26-year-old white woman, long glossy strawberry-blonde waves, flawless skin, glossy pink lips, pastel pink fitted mini dress, almond nails painted baby pink, strappy pink stiletto sandals showing a matching pink pedicure.
+4. **Ethan:** Ethan: a handsome 32-year-old Latino man, short dark wavy hair, light stubble, warm brown eyes, athletic build, light-blue shirt under a slim navy blazer, grey trousers, brown leather loafers.
+5. **Marcus:** Marcus: a handsome 36-year-old Black man, short fade haircut, neatly trimmed beard, confident charming smile, tall and fit, tailored charcoal suit with an open-collar white shirt, black leather shoes, black watch.
+6. **Priya:** Priya: a beautiful 28-year-old South Asian woman, long glossy straight black hair, warm brown skin, dark expressive eyes, small gold nose stud, lavender wrap dress, almond nails painted soft rose, gold strappy block-heel sandals showing a matching rose pedicure.
+7. **Rose:** Rose: an elegant 76-year-old white woman, short styled white hair, gold-rimmed glasses, kind face, floral silk blouse, cream skirt, pearl earrings, pale pink nails, low cream kitten heels.
+8. **Frank:** Frank: a 58-year-old white man, heavy build, slicked-back grey hair, ruddy cheeks, smug half-smile, maroon short-sleeve shirt, thin gold chain, grey slacks, brown loafers.
+9. **Jade:** Jade: a stunning 27-year-old East Asian woman, sleek black chin-length bob with blunt bangs, winged eyeliner, deep red lips, teal satin midi slip dress, almond nails painted deep wine, black pointed-toe stiletto pumps.
+10. **Tyler:** Tyler: a handsome 30-year-old East Asian man, styled black undercut, clean-shaven, smug grin, white knit polo shirt, camel tailored trousers, white leather sneakers, expensive silver watch.
+11. **Sam:** Sam: a pretty 29-year-old Latina woman, long wavy dark hair with caramel highlights, warm friendly smile, coral wrap top, white jeans, almond nails painted coral, tan wedge sandals showing a matching coral pedicure, small gold hoop earrings.
+12. **Linda:** Linda: an elegant, beautiful 55-year-old Black woman, short natural grey hair, gold drop earrings, burgundy fitted pencil dress, burgundy manicured nails, burgundy slingback heels.
 
 Formal outfits:
-- Eleanor: floor-length emerald green satin dress, pearl necklace
+- Eleanor: floor-length emerald green satin gown, pearl necklace, gold strappy heels
 - Richard: classic black tuxedo, black bow tie
-- Chloe: blush pink satin gown
-- Ethan: navy wedding suit, white shirt, silver tie
+- Chloe: blush pink satin gown, crystal stiletto sandals
+- Ethan: navy wedding suit, white shirt, silver tie, black oxfords
 - Marcus: charcoal suit, white shirt, no tie
-- Priya: ivory wedding dress (and optionally a red-and-gold lehenga)
+- Priya: ivory wedding dress with ivory satin heels (and optionally a red-and-gold lehenga with gold heels)
 - Tyler: loud green-and-navy plaid suit
-- Linda: burgundy floor-length gown
+- Linda: burgundy floor-length gown, gold slingback heels
 
 ### Quality checks before saving
 - Face matches `{actor}_ref` (compare side by side).
