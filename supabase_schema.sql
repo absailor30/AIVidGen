@@ -149,3 +149,17 @@ alter table ig_token enable row level security;
 -- (e) Hook/CTA experiment arm ('control' | 'tight'), stamped at generation.
 --
 -- alter table story_state add column if not exists experiment_arm text;
+
+-- (f) Follower-submitted stories. Added by hand after the follower agrees in
+--     DM; never written straight from DMs. generate_stories_cloud.py writes
+--     each pending one (even when the queue is full), marks it queued with the
+--     story_queue id, or failed after 3 attempts. RLS on, no policies.
+--
+-- create table if not exists story_submissions (
+--     id bigint generated always as identity primary key,
+--     variant text not null default 'short',
+--     summary text not null,
+--     status text not null default 'pending' check (status in ('pending','queued','failed')),
+--     attempts int not null default 0, last_error text, queue_id bigint,
+--     created_at timestamptz not null default now(), used_at timestamptz
+-- );

@@ -11,6 +11,7 @@ Required environment variables:
 """
 
 import json
+from datetime import datetime, timezone
 import os
 import re
 import sys
@@ -640,6 +641,44 @@ def validate_tight(story: dict):
         raise ValueError(f"tight CTA is {len(sentences[-1].split())} words, want <=10")
 
 
+# Submitted stories. A follower's own experience, sent by DM and approved for
+# use, arrives as a short summary in story_submissions (added by hand, never
+# straight from a DM). It replaces the theme lock for that one story: the
+# model keeps the submitted situation and writes it in the channel's format.
+SUBMISSION_MAX_ATTEMPTS = 3
+
+SUBMISSION_INSTRUCTION = (
+    "SUBMITTED STORY: a follower sent in this real experience and agreed to it "
+    "being retold. Build the story on THIS situation -- its core conflict, who "
+    "wronged whom, and how it resolved -- instead of inventing a new premise.\n"
+    "Change every name, place, job, date and any detail that could identify a "
+    "real person. Keep the emotional truth; invent the specifics. Do not quote "
+    "the summary verbatim.\n"
+    "Pick the closest theme from this exact list and put it in the theme field: "
+    "{themes}.\n\n"
+    "Summary:\n<<<\n{summary}\n>>>"
+)
+
+
+def pending_submissions(sb, variant: str) -> list[dict]:
+    """Approved submissions waiting to be written, oldest first."""
+    try:
+        return (sb.table("story_submissions").select("id,summary,attempts")
+                .eq("variant", variant).eq("status", "pending")
+                .order("id").execute().data)
+    except Exception as e:
+        # A missing table or a blip must not stop ordinary generation.
+        print(f"[generate] Could not read story_submissions ({str(e)[:100]}); skipping.")
+        return []
+
+
+def _mark_submission(sb, sub_id: int, **fields):
+    try:
+        sb.table("story_submissions").update(fields).eq("id", sub_id).execute()
+    except Exception as e:
+        print(f"[generate] Could not update submission {sub_id}: {str(e)[:100]}")
+
+
 def pick_theme(state_rows: list, variant: str | None = None) -> str:
     """Least-used theme. Scoped per variant when given, so a long video does not
     starve the short rotation of a theme (different audiences, independent cycles)."""
@@ -677,7 +716,12 @@ def main():
         .is_("claimed_at", "null").eq("variant", variant).execute().count
     )
     print(f"[generate] Unclaimed {variant} stories: {unclaimed}")
-    if unclaimed >= target:
+    # Submissions are written even when the queue is full: they are the
+    # stories followers are waiting to see, and there are only ever a few.
+    pending = pending_submissions(sb, variant)
+    if pending:
+        print(f"[generate] {len(pending)} submitted stor{'y' if len(pending) == 1 else 'ies'} to write.")
+    if unclaimed >= target and not pending:
         print("[generate] Queue healthy, nothing to do.")
         return
 
@@ -700,14 +744,20 @@ def main():
 
     written = 0
     attempts = 0
-    while unclaimed + written < target and attempts < (target - unclaimed) * 6:
+    max_attempts = max(target - unclaimed, 0) * 6 + len(pending) * SUBMISSION_MAX_ATTEMPTS
+    while (unclaimed + written < target or pending) and attempts < max_attempts:
         attempts += 1
+        sub = pending[0] if pending else None
         theme = pick_theme(state_rows, variant=variant)
         cta_style = pick_cta_style(state_rows, variant=variant)
         arm = pick_experiment_arm(assigned_arms)
         recent = [r for r in state_rows if r.get("theme") == theme][-25:]
+        opening = (
+            SUBMISSION_INSTRUCTION.format(themes=", ".join(THEMES), summary=sub["summary"])
+            if sub else f"Theme lock for this spin-off: \"{theme}\"."
+        )
         user_prompt = (
-            f"Theme lock for this spin-off: \"{theme}\".\n\n"
+            f"{opening}\n\n"
             f"CTA INSTRUCTION (cta_style token: {cta_style})\n"
             f"{CTA_STYLES[cta_style]}\n\n"
             + (f"{TIGHT_INSTRUCTION}\n\n" if arm == "tight" else "") +
@@ -724,10 +774,19 @@ def main():
             # Stamped by us, not the model: the arm is the experiment's key and
             # must not depend on the model echoing it back correctly.
             story["experiment_arm"] = arm
-            sb.table("story_queue").insert({
+            if sub:
+                story["source"] = "submitted"
+                story["submission_id"] = sub["id"]
+            ins = sb.table("story_queue").insert({
                 "variant": variant,
                 "theme": story["theme"], "title": story["title"], "payload": story,
             }).execute()
+            if sub:
+                qid = (ins.data or [{}])[0].get("id")
+                _mark_submission(sb, sub["id"], status="queued", queue_id=qid,
+                                 used_at=datetime.now(timezone.utc).isoformat())
+                print(f"[generate] Submission {sub['id']} queued as story {qid}.")
+                pending.pop(0)
             state_rows.append({"variant": variant, "theme": story["theme"],
                                 "hook": story["dna"].get("hook"),
                                 "fingerprint": story["dna"].get("fingerprint"), "curve": story["curve"],
@@ -744,6 +803,18 @@ def main():
             break
         except Exception as e:
             print(f"[generate] Attempt failed, retrying: {e}")
+            # Only count it against the submission if it is still pending;
+            # a failure after it was queued is not the submission's fault.
+            if sub and pending and pending[0] is sub:
+                sub["attempts"] = (sub.get("attempts") or 0) + 1
+                done = sub["attempts"] >= SUBMISSION_MAX_ATTEMPTS
+                _mark_submission(sb, sub["id"], attempts=sub["attempts"],
+                                 last_error=str(e)[:300],
+                                 **({"status": "failed"} if done else {}))
+                if done:
+                    print(f"[generate] Submission {sub['id']} failed "
+                          f"{SUBMISSION_MAX_ATTEMPTS} times; marked failed.")
+                    pending.pop(0)
 
     print(f"[generate] Done. Wrote {written} stories. Queue now ~{unclaimed + written}.")
 
