@@ -9,8 +9,14 @@ name: Twisty! StoryVault — Instagram trial Reel
 # the exact hour does not matter for a trial.
 
 on:
-  schedule:
-    - cron: "0 16 * * *"
+  # Schedule OFF. The first run (2026-10-03) was refused by Meta with
+  # error_subcode 2207081, "Trial Reel Not Enough Followers": the account is
+  # below Instagram's follower threshold for trial Reels. The request itself
+  # was accepted, so the code is right. Re-enable once the account qualifies:
+  # trigger this by hand first, and restore the cron below if it posts.
+  #
+  # schedule:
+  #   - cron: "0 16 * * *"
   workflow_dispatch: {}
 
 jobs:
