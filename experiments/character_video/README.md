@@ -70,6 +70,8 @@ Ref2VA and assembled with edge-tts + ffmpeg.
 
 Scripts: `pod/start.sh`, `pod/tunnel.sh`, `pod/build_sageattention.sh`.
 
+Recurring cast (16 actors, theme research, Flow prompts): `cast_plan.md`.
+
 ## Before posting
 
 Tick YouTube's "altered or synthetic content" label and Instagram's AI label.
