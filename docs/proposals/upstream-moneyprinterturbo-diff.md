@@ -70,9 +70,10 @@ this repo's per-story local material handling (`build_payload`'s
   `app/services/muapi.py`, `app/services/ofox.py`, `app/services/sonilo.py`,
   `app/services/elevenlabs_music.py`, `app/services/bgm.py` — additional
   third-party provider integrations (video search/analysis, music, etc.).
-  Not reviewed; `bgm.py` in particular conflicts with this repo's deliberate
-  choice to ship no background music at all (see the NOTE on `bgm_type` in
-  `render_from_supabase.py` — a copyright decision, not a taste one).
+  Not reviewed. On `bgm.py`: this repo now uses only YouTube Audio Library
+  tracks in `resource/songs/` (#28), because the inherited tracks drew
+  copyright claims. Any upstream music source would need the same licence check
+  before a single file lands in that folder.
 
 ## Not relevant to this repo
 
