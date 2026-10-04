@@ -1,4 +1,4 @@
-# Pipeline checkpoint — 2026-10-03
+# Pipeline checkpoint — 2026-10-04
 
 A snapshot of how Twisty! StoryVault runs, why it is set up this way, and what
 is still open. Update this in place rather than adding dated copies.
@@ -81,6 +81,30 @@ identity; parts must stay close-up/medium and ≤5s; the room image works best a
 a style reference rather than a frame to copy. An L40 is the cheapest pod that
 fits (needs ~67GB RAM, ~28GB VRAM); a story costs roughly $2–2.5 of pod time.
 
+Where it is heading (budget: $20/month, one story a day):
+
+- **Recurring cast** — `experiments/character_video/cast_plan.md`. Theme
+  research from `story_metrics` (median day-3 views: Wedding & Family
+  Entitlement 304, In-Law Conflicts 301, Sibling Rivalry 202 lead; Business
+  Partnership Betrayal 39 trails) and a 16-actor repertory cast with Flow
+  prompts for multi-angle refs. Refs are made by hand in Flow; none exist yet
+  beyond the original four.
+- **Hybrid lane** — `docs/proposals/hybrid-character-lane.md`. MiniMax only for
+  the 4–5 beats that need a moving face; set/prop libraries, freeze-frames and
+  Remotion for the rest; one weekly pod batch of 7 stories ≈ $12/month.
+- **Headless WanGP exists.** `python wgp.py --process <settings.json|queue.zip>`
+  runs without the web UI, and `shared/api.py` exposes `init()` /
+  `submit_task()` / `submit_manifest()` for in-process batches. MiniMax Ref2VA
+  is model `minimax_h3_ref2va_pruned_pdd`; references go in `image_refs` with a
+  reference `video_prompt_type` — take the exact keys from the UI's "Export
+  Settings" before scripting it. Not yet run on a pod.
+- **Runpod from Claude Code.** The Runpod plugin only installs in a local
+  Claude Code, not cloud sessions. Cloud sessions use the REST API
+  (`rest.runpod.io`) with a `RUNPOD_API_KEY` environment variable instead —
+  added to the cloud environment on 2026-10-04, untested yet (new sessions only
+  pick it up). The environment's network allowlist now includes the Runpod
+  docs, API and MCP hosts and huggingface.co.
+
 ## Open items
 
 - Delete the Worker's `30 21 * * *` cron trigger in the Cloudflare dashboard.
@@ -93,6 +117,11 @@ fits (needs ~67GB RAM, ~28GB VRAM); a story costs roughly $2–2.5 of pod time.
 - The illustrated lane has no schedule and posts unlisted. Give it a cron only
   once the look has been judged and its `story_metrics` rows can be compared
   against the short lane.
-- Character video: verify WanGP can run headless before designing the automated
-  lane; until output quality is consistent, any automated version needs a human
-  approval step before posting, and the AI-content labels on both platforms.
+- Character video: run one `--process` job on a pod to prove headless MiniMax
+  works, then confirm `RUNPOD_API_KEY` by listing pods from a new session.
+  Next content step: three 60–75s stories for the top themes (wedding, in-law,
+  sibling) written as hybrid shot lists. Until output quality is consistent,
+  any automated version needs a human approval step before posting, and the
+  AI-content labels on both platforms. Supabase flags `story_metrics` as having
+  RLS disabled — enabling it needs a read policy for any anon-key reader first
+  (the GitHub jobs use the service key and are unaffected).
