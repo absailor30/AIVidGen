@@ -39,6 +39,7 @@ from generate_stories_cloud import (
     LONG_TOTAL_MIN,
     QUEUE_TARGETS,
     THEMES,
+    GroqQuotaExhausted,
     call_groq,
     pick_theme,
     validate_story,
@@ -76,12 +77,16 @@ pressure. It is NOT a Short padded out with repetition."""
 STRUCTURE = """The video runs in four movements, in this exact order:
 
 MOVEMENT 1 — the first 7 minutes, in this beat order:
-  HOOK        open mid-consequence on the sharpest image in the story. No
-              throat-clearing, no scene-setting preamble.
+  HOOK        open mid-consequence on the sharpest image in the story. The
+              FIRST sentence lands the conflict in 12 words or fewer -- no
+              names, no time or place, no "So this happened". About 45 words
+              in total. Viewers decide in the first few seconds.
   LOCK-IN     immediately promise the specific question the video answers
               ("what I found in that drawer changed everything") and establish
               the stakes, so the viewer commits to staying.
-  BODY 1      the setup: who these people are, what was normal before.
+  BODY 1      the setup, told while the tension is live: every paragraph
+              must move the conflict forward. Context arrives through what
+              is happening, never as a block of backstory.
   REHOOK 1    a forward-reference that re-buys attention ("I didn't know it
               yet, but the worst part hadn't happened").
   BODY 2      the betrayal begins to surface; escalate the pressure.
@@ -156,9 +161,11 @@ Output valid JSON only."""
 # Human-readable role for each beat, so the prose call knows its job without
 # re-reading the whole structure brief.
 BEAT_ROLE = {
-    "hook": "Open mid-consequence on the sharpest image in the story. No preamble.",
+    "hook": ("Open mid-consequence on the sharpest image in the story. First sentence: "
+             "the conflict, in 12 words or fewer. No names, no scene-setting, no preamble."),
     "lock_in": "Promise the specific question this video answers, and set the stakes.",
-    "body_1": "The setup: who these people are and what normal looked like before.",
+    "body_1": ("The setup, told while the tension is live: every paragraph moves the "
+               "conflict. Context comes through events, never as a block of backstory."),
     "rehook_1": "A short forward-reference that re-buys attention.",
     "body_2": "The betrayal surfaces. Escalate the pressure.",
     "rehook_2": "Another forward-reference, sharper than the first.",
@@ -284,6 +291,8 @@ def generate_long_story(theme: str, recent: list) -> dict:
                 previous_tail = _tail(text)
                 print(f"[long]   {name}: {n} words (target {spec['target']})")
                 break
+            except GroqQuotaExhausted:
+                raise   # retrying a beat cannot help; see the story loop
             except Exception as e:
                 last_error = e
                 print(f"[long]   {name} attempt {attempt + 1} failed: {e}")
@@ -323,8 +332,9 @@ def main():
         ).execute().data
 
     written = 0
+    quota_out = False
     for _ in range(STORIES_PER_RUN):
-        if unclaimed + written >= target:
+        if unclaimed + written >= target or quota_out:
             break
         theme = pick_theme(state_rows, variant=VARIANT) if state_rows else THEMES[0]
         recent = [
@@ -336,6 +346,12 @@ def main():
             try:
                 story = generate_long_story(theme, recent)
                 validate_story(story, variant=VARIANT)
+            except GroqQuotaExhausted as e:
+                # Stop outright. The queue buffer covers tonight's render, and
+                # more attempts would only fail the same way.
+                print(f"[long] {e}")
+                quota_out = True
+                break
             except Exception as e:
                 print(f"[long] Story attempt {attempt + 1} failed: {e}")
                 continue

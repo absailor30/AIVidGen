@@ -33,6 +33,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GOOGLE_TOKEN_PICKLE_B64: ${{ secrets.GOOGLE_TOKEN_PICKLE_B64 }}
+          # Fallback only; the live token is the auto-refreshed one in Supabase.
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
         shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
         run: python collect_metrics.py 2>&1 | tee -a /tmp/metrics.log
 

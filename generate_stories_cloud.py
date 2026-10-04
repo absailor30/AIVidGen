@@ -11,6 +11,7 @@ Required environment variables:
 """
 
 import json
+from datetime import datetime, timezone
 import os
 import re
 import sys
@@ -63,7 +64,8 @@ MAX_RETRY_WAIT = 120.0
 # so the buffer is what makes an empty queue at render time survivable: run #14
 # died because generation and rendering shared a slot and Groq rate-limited the
 # 17 calls a long story needs, leaving nothing to post.
-QUEUE_TARGETS = {"short": 4, "long": 3, "illustrated": 2}
+# "trial" is the Instagram trial-Reel lane: one a day, so a small buffer.
+QUEUE_TARGETS = {"short": 4, "long": 3, "illustrated": 2, "trial": 2}
 QUEUE_TARGET = QUEUE_TARGETS["short"]   # back-compat for anything importing this
 
 # Compact system prompt. We deliberately do NOT send the full 28KB story bible
@@ -152,8 +154,13 @@ REQUIRED_KIT_KEYS_LONG = ["youtube_title", "youtube_description", "youtube_tags"
 # `brief` names the logical beat in the plan that this request draws from;
 # `part` positions it within that beat.
 LONG_BEATS = {
-    "hook":      {"target":  96, "min":  67, "max": 125, "brief": "hook",     "part": None},
-    "lock_in":   {"target":  96, "min":  67, "max": 125, "brief": "lock_in",  "part": None},
+    # Hook and lock-in were 96 words each -- nearly a minute before the story
+    # moved -- and long-form viewers were leaving within seconds (median watch
+    # under a minute of ~9). Cut to ~13s and ~18s so the conflict is on screen
+    # almost immediately. The ~87 words freed stay out: the total still sits
+    # inside LONG_TOTAL_MIN..MAX.
+    "hook":      {"target":  45, "min":  32, "max":  60, "brief": "hook",     "part": None},
+    "lock_in":   {"target":  60, "min":  42, "max":  80, "brief": "lock_in",  "part": None},
     "body_1a":   {"target": 163, "min": 114, "max": 212, "brief": "body_1",   "part": "first"},
     "body_1b":   {"target": 163, "min": 114, "max": 212, "brief": "body_1",   "part": "second"},
     "rehook_1":  {"target":  62, "min":  43, "max":  81, "brief": "rehook_1", "part": None},
@@ -210,8 +217,12 @@ HARD RULES:
   fewer than 270 words — expand each of the four beats with concrete, specific,
   sensory detail rather than rushing to the ending.
 - First person, one paragraph, no quotation marks around dialogue.
-- End with a short spoken follow-CTA woven naturally into the closing line
-  (e.g. "Follow for the next one.").
+- End with ONE spoken call to action, woven naturally into the closing line.
+  The user message carries a CTA INSTRUCTION for this story -- follow it exactly
+  and use no other ask. It is rotated per story (share / comment a word /
+  follow), because a single clear ask outperforms three competing ones, and
+  because a channel that makes the same request every time gets tuned out.
+  Echo which one you were given back in the "cta_style" field.
 - Keep it grounded and realistic — no over-the-top or implausible twists.
 - OPENING CLASS: vary it. Pick whichever of these best fits the story rather
   than defaulting to one — an unexpected call or message arriving, a moment of
@@ -234,6 +245,8 @@ after), matching exactly:
   "keywords": "... 15-25 word stock-footage search string, plain words, no commas ...",
   "dna": {"hook": "...", "relationship": "...", "conflict": "...", "emotion": "...", "payoff": "... the satisfying/karmic resolution ...", "fingerprint": "..."},
   "curve": "... describe the hook -> build-up -> trigger -> satisfying-close arc ...",
+  "cta_style": "... copy the cta_style token given in the CTA INSTRUCTION, exactly ...",
+  "cta_keyword": "... the single word for the comment CTA, or \"\" for the other styles ...",
   "variables_changed": ["...", "..."],
   "score": 88,
   "cooldown_flag": "...",
@@ -256,6 +269,54 @@ def _check_self_contained(text: str):
     for banned in ("part 1", "part 2", "part one", "part two", "to be continued"):
         if banned in lowered:
             raise ValueError(f"story must be self-contained, found '{banned}'")
+
+
+def validate_cta(story: dict, expected_style: str):
+    """The CTA is only rotated if the model actually used the style it was given.
+
+    Without this the model drifts back to "follow for more" on every story --
+    it is the most common ending in its training data, and the one the brief
+    used to hardcode. A silent drift would look like rotation in the database
+    and be a single CTA in the videos.
+    """
+    style = (story.get("cta_style") or "").strip()
+    if style != expected_style:
+        raise ValueError(f"cta_style is {style!r}, expected {expected_style!r}")
+
+    text = story["story"].lower()
+    if expected_style == "comment_word":
+        word = (story.get("cta_keyword") or "").strip()
+        if not word or not word.isalpha() or len(word) > 15:
+            raise ValueError(f"cta_keyword must be one plain word, got {word!r}")
+        if "comment" not in text:
+            raise ValueError("comment CTA must ask the viewer to comment")
+        # The word must appear in the STORY BODY, not just in the CTA line --
+        # checking the whole text is vacuous, since the closing ask always
+        # contains the word by construction. Everything before the final
+        # "comment" is the body.
+        body = text[:text.rfind("comment")]
+        if word.lower() not in body:
+            # The point of this style is a word the viewer just heard. One that
+            # appears only in the ask reads as a spam prompt.
+            raise ValueError(
+                f"cta_keyword {word!r} does not appear in the story body "
+                f"(only in the CTA line)"
+            )
+    elif expected_style == "share":
+        if not any(w in text for w in ("send this", "share this", "send it", "share it")):
+            raise ValueError("share CTA must ask the viewer to send or share it")
+    elif expected_style == "follow":
+        if "follow" not in text:
+            raise ValueError("follow CTA must ask the viewer to follow")
+
+    # Competing asks defeat the whole reason for rotating one at a time. Only
+    # the tail is checked: a story can legitimately use these words in prose.
+    tail = text[-320:]
+    others = {"share": ("follow", "comment"), "comment_word": ("follow", "share this"),
+              "follow": ("comment", "share this")}[expected_style]
+    for other in others:
+        if other in tail:
+            raise ValueError(f"CTA style {expected_style} must not also ask to {other}")
 
 
 def validate_story(story: dict, variant: str = "short"):
@@ -314,6 +375,11 @@ def _validate_long(story: dict):
             f"story word count {total} outside {LONG_TOTAL_MIN}-{LONG_TOTAL_MAX} range"
         )
 
+    import re as _re
+    hook_first = _re.split(r"(?<=[.!?])\s+", str(sections.get("hook", "")).strip())[0]
+    if len(hook_first.split()) > 14:
+        raise ValueError(f"hook opens with a {len(hook_first.split())}-word sentence; "
+                         f"the first line must land the conflict in 12 words or fewer")
     if "subscribe" not in str(sections["cta"]).lower():
         raise ValueError("cta section must contain an explicit 'Subscribe' call-out")
 
@@ -342,6 +408,29 @@ def _is_model_gone(resp) -> bool:
     return False
 
 
+class GroqQuotaExhausted(RuntimeError):
+    """Every model in the chain is out of its daily (or per-request) allowance."""
+
+
+def _is_quota_exhausted(resp) -> bool:
+    """A 429 that no amount of waiting inside this job will clear.
+
+    Two shapes, both seen on 2026-09-30 when a Shorts run sat for its whole
+    40-minute budget retrying and was cancelled before it could render:
+      * "tokens per day (TPD)" -- the free tier's 200k daily allowance is
+        spent; the reset is ~30 minutes to hours away.
+      * "Request too large ... (OTPM)" -- the request alone exceeds the
+        model's per-minute output cap, so it can never succeed on that model.
+    The backoff below was built for per-minute limits, which clear in under a
+    minute. Against these it just burns the job's time. Each Groq model has its
+    own allowance, so the right move is the next model, not a wait.
+    """
+    if resp.status_code != 429:
+        return False
+    body = (resp.text or "").lower()
+    return ("per day" in body) or ("request too large" in body)
+
+
 def call_groq(system: str, user: str) -> dict:
     global _active_model
 
@@ -350,6 +439,7 @@ def call_groq(system: str, user: str) -> dict:
         m for m in GROQ_MODELS if m != _active_model
     ]
     resp = None
+    quota_hit = []
     for model in candidates:
         # Retry on 429 (rate limit), honoring the reset window the API reports.
         for attempt in range(GROQ_429_ATTEMPTS):
@@ -364,6 +454,10 @@ def call_groq(system: str, user: str) -> dict:
                 },
                 timeout=60,
             )
+            if _is_quota_exhausted(resp):
+                print(f"[generate] {model} is out of quota, not waiting: "
+                      f"{(resp.text or '').strip()[:200]}")
+                break
             if resp.status_code == 429 and attempt < GROQ_429_ATTEMPTS - 1:
                 wait = _parse_retry_seconds(resp)
                 # Print the body. A per-minute token cap and an exhausted daily
@@ -379,6 +473,9 @@ def call_groq(system: str, user: str) -> dict:
         if _is_model_gone(resp):
             print(f"[generate] Model '{model}' unavailable ({resp.status_code}), trying next.")
             continue
+        if _is_quota_exhausted(resp):
+            quota_hit.append(model)
+            continue
 
         resp.raise_for_status()
         if _active_model != model:
@@ -386,6 +483,12 @@ def call_groq(system: str, user: str) -> dict:
             _active_model = model
         break
     else:
+        if quota_hit:
+            raise GroqQuotaExhausted(
+                f"Groq quota exhausted on {quota_hit}; other models "
+                f"{[m for m in candidates if m not in quota_hit]} were unavailable. "
+                f"Generation stops for this run; queued stories still render."
+            )
         raise RuntimeError(
             f"No usable Groq model. Tried {GROQ_MODELS}; all returned model-not-found. "
             f"Check https://console.groq.com/docs/models and set the GROQ_MODEL secret."
@@ -436,6 +539,147 @@ def _parse_retry_seconds(resp) -> float:
     return 15.0
 
 
+CTA_STYLES = {
+    # "share" asks for a send, which is the strongest ranking signal on both
+    # Shorts and Reels -- a share is worth far more than a like, and these
+    # stories are built to make someone think of a specific person.
+    "share": (
+        "Close by asking the viewer to SEND or SHARE this with someone who has "
+        "been through the same thing. Make it specific to this story's situation, "
+        "not generic -- name the kind of person who would recognise it. One "
+        "sentence, spoken naturally as the last line. Do NOT ask for a follow, "
+        "a like or a comment in this story."
+    ),
+    # "comment_word" trades reach for comment volume. The word has to come from
+    # the story itself or the prompt reads as spam, which is why cta_keyword is
+    # generated per story and validated against the story text.
+    "comment_word": (
+        "Close by asking the viewer to comment ONE specific word if they have "
+        "been through the same thing. Choose a single word that appears in this "
+        "story and carries its emotional weight (e.g. the object, the room, the "
+        "phrase that stung). Put that word in the cta_keyword field, and use it "
+        "in the closing line in the form: comment <WORD> if you went through "
+        "the same. One sentence, spoken naturally. Do NOT ask for a follow, a "
+        "like or a share in this story."
+    ),
+    "follow": (
+        "Close by asking the viewer to follow for more stories like this. One "
+        "sentence, spoken naturally as the last line, in the channel's voice -- "
+        "not 'don't forget to smash that follow button'. Do NOT ask for a "
+        "comment or a share in this story."
+    ),
+}
+
+
+def pick_cta_style(state_rows: list, variant: str | None = None) -> str:
+    """Least-used CTA style, rotated per variant.
+
+    Deliberately one CTA per story rather than stacking all three. Asking for a
+    share AND a comment AND a follow in the last ten seconds gets none of them;
+    a single clear ask is the whole point of rotating instead of combining.
+
+    Rotation is driven by story_state, so it survives across runs and runners --
+    the generator is stateless and every run is a fresh container, so anything
+    held in memory would reset the cycle on every invocation. Rows written
+    before cta_style existed read as None and are ignored, which means the
+    cycle simply starts fresh rather than skewing towards whatever is first.
+    """
+    rows = state_rows
+    if variant is not None:
+        rows = [r for r in rows if (r.get("variant") or "short") == variant]
+    counts = {c: 0 for c in CTA_STYLES}
+    for r in rows[-60:]:
+        if r.get("cta_style") in counts:
+            counts[r["cta_style"]] += 1
+    # Least-used wins; ties break on CTA_STYLES order, which keeps the cycle
+    # deterministic instead of drifting.
+    return min(CTA_STYLES, key=lambda c: (counts[c], list(CTA_STYLES).index(c)))
+
+
+# Hook/CTA experiment, started 2026-09-28. The retention curves showed the
+# loss is at the front: ~45% of viewers leave in the first 30% of a Short, the
+# middle is nearly flat, and the last 10% (the sign-off and CTA) loses half of
+# whoever is left. Half of Shorts get a sharper opening and a one-line CTA
+# ("tight"); the other half are generated exactly as before ("control"), so
+# story_retention can compare the two directly instead of before-vs-after,
+# which would confound the change with whatever else shifts week to week.
+EXPERIMENT_ARMS = ("control", "tight")
+
+TIGHT_INSTRUCTION = (
+    "OPENING (this story is in the 'tight' format): the first sentence must "
+    "drop the viewer straight into the conflict -- the moment it goes wrong -- "
+    "in 12 words or fewer. No scene-setting, no names, no backstory, no 'So "
+    "this happened' in the first two sentences; fold any context in later, "
+    "only where it is needed. Reach the betrayal within the first quarter of "
+    "the story.\n"
+    "CTA: deliver the call to action above as ONE short sentence of 10 words "
+    "or fewer, and make it the very last sentence. No sign-off after it."
+)
+
+
+def pick_experiment_arm(assigned: list) -> str:
+    """Alternate arms so the two groups stay the same size.
+
+    `assigned` is every arm already given out for this variant -- published
+    stories AND stories still waiting in the queue. Counting only published
+    ones would let a run that queues several stories give them all the same
+    arm, since none of them are in story_state yet.
+    """
+    counts = {a: 0 for a in EXPERIMENT_ARMS}
+    for a in assigned:
+        if a in counts:
+            counts[a] += 1
+    return min(EXPERIMENT_ARMS, key=lambda a: (counts[a], EXPERIMENT_ARMS.index(a)))
+
+
+def validate_tight(story: dict):
+    """The tight arm only means something if the model actually wrote it tight."""
+    import re
+    sentences = [x for x in re.split(r"(?<=[.!?])\s+", story["story"].strip()) if x]
+    if len(sentences[0].split()) > 14:
+        raise ValueError(f"tight opening is {len(sentences[0].split())} words, want <=12")
+    if len(sentences[-1].split()) > 12:
+        raise ValueError(f"tight CTA is {len(sentences[-1].split())} words, want <=10")
+
+
+# Submitted stories. A follower's own experience, sent by DM and approved for
+# use, arrives as a short summary in story_submissions (added by hand, never
+# straight from a DM). It replaces the theme lock for that one story: the
+# model keeps the submitted situation and writes it in the channel's format.
+SUBMISSION_MAX_ATTEMPTS = 3
+
+SUBMISSION_INSTRUCTION = (
+    "SUBMITTED STORY: a follower sent in this real experience and agreed to it "
+    "being retold. Build the story on THIS situation -- its core conflict, who "
+    "wronged whom, and how it resolved -- instead of inventing a new premise.\n"
+    "Change every name, place, job, date and any detail that could identify a "
+    "real person. Keep the emotional truth; invent the specifics. Do not quote "
+    "the summary verbatim.\n"
+    "Pick the closest theme from this exact list and put it in the theme field: "
+    "{themes}.\n\n"
+    "Summary:\n<<<\n{summary}\n>>>"
+)
+
+
+def pending_submissions(sb, variant: str) -> list[dict]:
+    """Approved submissions waiting to be written, oldest first."""
+    try:
+        return (sb.table("story_submissions").select("id,summary,attempts")
+                .eq("variant", variant).eq("status", "pending")
+                .order("id").execute().data)
+    except Exception as e:
+        # A missing table or a blip must not stop ordinary generation.
+        print(f"[generate] Could not read story_submissions ({str(e)[:100]}); skipping.")
+        return []
+
+
+def _mark_submission(sb, sub_id: int, **fields):
+    try:
+        sb.table("story_submissions").update(fields).eq("id", sub_id).execute()
+    except Exception as e:
+        print(f"[generate] Could not update submission {sub_id}: {str(e)[:100]}")
+
+
 def pick_theme(state_rows: list, variant: str | None = None) -> str:
     """Least-used theme. Scoped per variant when given, so a long video does not
     starve the short rotation of a theme (different audiences, independent cycles)."""
@@ -473,22 +717,51 @@ def main():
         .is_("claimed_at", "null").eq("variant", variant).execute().count
     )
     print(f"[generate] Unclaimed {variant} stories: {unclaimed}")
-    if unclaimed >= target:
+    # Submissions are written even when the queue is full: they are the
+    # stories followers are waiting to see, and there are only ever a few.
+    pending = pending_submissions(sb, variant)
+    if pending:
+        print(f"[generate] {len(pending)} submitted stor{'y' if len(pending) == 1 else 'ies'} to write.")
+    if unclaimed >= target and not pending:
         print("[generate] Queue healthy, nothing to do.")
         return
 
     system_prompt = CHANNEL_BRIEF + AUTOMATION_TAIL
 
-    state_rows = sb.table("story_state").select("variant,theme,hook,fingerprint,curve").execute().data
+    # cta_style is selected because pick_cta_style rotates on it. Leave it out
+    # and every run sees None, picks the first style, and "rotation" becomes a
+    # single CTA forever.
+    state_rows = sb.table("story_state").select(
+        "variant,theme,hook,fingerprint,curve,cta_style,experiment_arm"
+    ).execute().data
+    # Arms already handed out: published stories plus those still queued.
+    assigned_arms = [r.get("experiment_arm") for r in state_rows
+                     if (r.get("variant") or "short") == variant]
+    assigned_arms += [
+        (r.get("payload") or {}).get("experiment_arm") for r in
+        sb.table("story_queue").select("payload").is_("claimed_at", "null")
+        .eq("variant", variant).execute().data
+    ]
 
     written = 0
     attempts = 0
-    while unclaimed + written < target and attempts < (target - unclaimed) * 6:
+    max_attempts = max(target - unclaimed, 0) * 6 + len(pending) * SUBMISSION_MAX_ATTEMPTS
+    while (unclaimed + written < target or pending) and attempts < max_attempts:
         attempts += 1
+        sub = pending[0] if pending else None
         theme = pick_theme(state_rows, variant=variant)
+        cta_style = pick_cta_style(state_rows, variant=variant)
+        arm = pick_experiment_arm(assigned_arms)
         recent = [r for r in state_rows if r.get("theme") == theme][-25:]
+        opening = (
+            SUBMISSION_INSTRUCTION.format(themes=", ".join(THEMES), summary=sub["summary"])
+            if sub else f"Theme lock for this spin-off: \"{theme}\"."
+        )
         user_prompt = (
-            f"Theme lock for this spin-off: \"{theme}\".\n\n"
+            f"{opening}\n\n"
+            f"CTA INSTRUCTION (cta_style token: {cta_style})\n"
+            f"{CTA_STYLES[cta_style]}\n\n"
+            + (f"{TIGHT_INSTRUCTION}\n\n" if arm == "tight" else "") +
             f"Recent entries in this theme batch (avoid repeating fingerprints/hooks/curves):\n"
             f"{json.dumps(recent, ensure_ascii=False)}\n\n"
             f"Generate one new story now."
@@ -496,17 +769,53 @@ def main():
         try:
             story = call_groq(system_prompt, user_prompt)
             validate_story(story)
-            sb.table("story_queue").insert({
+            validate_cta(story, cta_style)
+            if arm == "tight":
+                validate_tight(story)
+            # Stamped by us, not the model: the arm is the experiment's key and
+            # must not depend on the model echoing it back correctly.
+            story["experiment_arm"] = arm
+            if sub:
+                story["source"] = "submitted"
+                story["submission_id"] = sub["id"]
+            ins = sb.table("story_queue").insert({
                 "variant": variant,
                 "theme": story["theme"], "title": story["title"], "payload": story,
             }).execute()
+            if sub:
+                qid = (ins.data or [{}])[0].get("id")
+                _mark_submission(sb, sub["id"], status="queued", queue_id=qid,
+                                 used_at=datetime.now(timezone.utc).isoformat())
+                print(f"[generate] Submission {sub['id']} queued as story {qid}.")
+                pending.pop(0)
             state_rows.append({"variant": variant, "theme": story["theme"],
                                 "hook": story["dna"].get("hook"),
-                                "fingerprint": story["dna"].get("fingerprint"), "curve": story["curve"]})
+                                "fingerprint": story["dna"].get("fingerprint"), "curve": story["curve"],
+                                # Without these, a run queuing several stories
+                                # rotates neither the CTA nor the arm.
+                                "cta_style": cta_style, "experiment_arm": arm})
+            assigned_arms.append(arm)
             written += 1
-            print(f"[generate] Queued: {story['title']} ({story['theme']})")
+            print(f"[generate] Queued: {story['title']} ({story['theme']}, {arm}, {cta_style})")
+        except GroqQuotaExhausted as e:
+            # Every further attempt would fail the same way and spend no
+            # tokens, only time. Stop, and let the render use the queue.
+            print(f"[generate] {e}")
+            break
         except Exception as e:
             print(f"[generate] Attempt failed, retrying: {e}")
+            # Only count it against the submission if it is still pending;
+            # a failure after it was queued is not the submission's fault.
+            if sub and pending and pending[0] is sub:
+                sub["attempts"] = (sub.get("attempts") or 0) + 1
+                done = sub["attempts"] >= SUBMISSION_MAX_ATTEMPTS
+                _mark_submission(sb, sub["id"], attempts=sub["attempts"],
+                                 last_error=str(e)[:300],
+                                 **({"status": "failed"} if done else {}))
+                if done:
+                    print(f"[generate] Submission {sub['id']} failed "
+                          f"{SUBMISSION_MAX_ATTEMPTS} times; marked failed.")
+                    pending.pop(0)
 
     print(f"[generate] Done. Wrote {written} stories. Queue now ~{unclaimed + written}.")
 

@@ -119,3 +119,47 @@ create table if not exists ig_token (
   constraint ig_token_singleton check (id = 1)
 );
 alter table ig_token enable row level security;
+
+-- (c) Rotated call to action. pick_cta_style in generate_stories_cloud.py
+--     rotates share / comment_word / follow by reading which styles were used
+--     recently, so the column is what makes the rotation survive across runs
+--     (every GitHub Actions run is a fresh container). Nullable on purpose:
+--     rows written before this existed read as NULL and are ignored, so the
+--     cycle starts fresh instead of skewing.
+--
+-- alter table story_state add column if not exists cta_style text;
+
+-- (d) Audience retention curves. One row per 1% of a video's runtime, 100 per
+--     video, captured once when the video is 3 days old (collect_metrics.py).
+--     story_metrics holds the AVERAGE share watched; this holds WHERE viewers
+--     left, which is what a beat-structure edit actually needs. RLS on with no
+--     policies: only the service key used by the collector can read or write.
+--
+-- create table if not exists story_retention (
+--     youtube_id text not null,
+--     elapsed_ratio numeric not null,          -- 0.01 .. 1.00
+--     audience_watch_ratio numeric,            -- watches of this moment / views
+--     relative_retention_performance numeric,  -- 0..1 vs similar-length videos
+--     age_days int not null,                   -- video age at capture
+--     collected_on date not null default current_date,
+--     primary key (youtube_id, elapsed_ratio)
+-- );
+-- alter table story_retention enable row level security;
+
+-- (e) Hook/CTA experiment arm ('control' | 'tight'), stamped at generation.
+--
+-- alter table story_state add column if not exists experiment_arm text;
+
+-- (f) Follower-submitted stories. Added by hand after the follower agrees in
+--     DM; never written straight from DMs. generate_stories_cloud.py writes
+--     each pending one (even when the queue is full), marks it queued with the
+--     story_queue id, or failed after 3 attempts. RLS on, no policies.
+--
+-- create table if not exists story_submissions (
+--     id bigint generated always as identity primary key,
+--     variant text not null default 'short',
+--     summary text not null,
+--     status text not null default 'pending' check (status in ('pending','queued','failed')),
+--     attempts int not null default 0, last_error text, queue_id bigint,
+--     created_at timestamptz not null default now(), used_at timestamptz
+-- );

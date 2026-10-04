@@ -1,9 +1,22 @@
-name: Twisty! StoryVault — render & upload
+name: Twisty! StoryVault — Instagram trial Reel
+
+# One trial Reel a day: a normal Short, shown by Instagram to NON-followers
+# only, with SS_PERFORMANCE so Instagram shares it to followers itself if it
+# does well. Instagram-only -- see VARIANT_PROFILES["trial"].
+#
+# Its own workflow file so it holds its own lock and never blocks a Shorts
+# slot. Scheduled on GitHub's cron, which runs 2-3 hours late on this repo;
+# the exact hour does not matter for a trial.
 
 on:
-  # Scheduling is driven by Cloudflare Cron Triggers (see cloudflare_worker.js),
-  # which fire on time — GitHub's own cron lagged 1-3hrs on free tier. The
-  # Worker calls this workflow via workflow_dispatch at each slot.
+  # Schedule OFF. The first run (2026-10-03) was refused by Meta with
+  # error_subcode 2207081, "Trial Reel Not Enough Followers": the account is
+  # below Instagram's follower threshold for trial Reels. The request itself
+  # was accepted, so the code is right. Re-enable once the account qualifies:
+  # trigger this by hand first, and restore the cron below if it posts.
+  #
+  # schedule:
+  #   - cron: "0 16 * * *"
   workflow_dispatch: {}
 
 jobs:
@@ -16,6 +29,9 @@ jobs:
       # truncates the tail the failure alert quotes, which is the whole point
       # of capturing it.
       PYTHONUNBUFFERED: "1"
+      # Selects the trial profile: the Shorts render, posted to Instagram
+      # only, as a trial Reel (non-followers first).
+      STORY_VARIANT: "trial"
     # Generation + render + upload needs more than 20min in the worst case:
     # run #197 rendered a 107s video successfully at 18:13:32 and was killed
     # at 18:15:05 partway through the upload. Refilling an empty queue can
@@ -63,11 +79,6 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
-          GOOGLE_CLIENT_SECRET_JSON: ${{ secrets.GOOGLE_CLIENT_SECRET_JSON }}
-          GOOGLE_TOKEN_PICKLE_B64: ${{ secrets.GOOGLE_TOKEN_PICKLE_B64 }}
-          YOUTUBE_PRIVACY: "public"
-          YOUTUBE_CATEGORY_ID: "24"
-          YOUTUBE_PLAYLIST_ID: ${{ secrets.YOUTUBE_PLAYLIST_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
         shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
@@ -88,7 +99,7 @@ jobs:
         run: |
           TAIL=$(tail -c 2000 /tmp/pipeline.log 2>/dev/null || true)
           [ -n "$TAIL" ] || TAIL="(no output captured - the job died before the scripts ran)"
-          MSG=$(printf 'Twisty StoryVault FAILED (run #%s)\n\n%s\n\n%s\n\nTry /logs for detail, or /fix to auto-repair a retired model.' \
+          MSG=$(printf 'Twisty StoryVault TRIAL REEL FAILED (run #%s)\n\n%s\n\n%s\n\nTry /logs for detail, or /fix to auto-repair a retired model.' \
             "$RUN_NUMBER" "$TAIL" "$RUN_URL")
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \

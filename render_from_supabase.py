@@ -25,6 +25,7 @@ deleted immediately after. Nothing is ever permanently publicly accessible.
 """
 
 import base64
+import json
 import os
 import pickle
 import random
@@ -69,25 +70,69 @@ VOICE_SPEED = 1.4
 # Everything that differs between the two video formats. The short profile
 # reproduces exactly what shipped before this table existed — see
 # test_variant_profiles.py, which asserts the payload byte-for-byte.
-# NOTE on bgm_type: every profile sets it to "" -- no background music, on
-# every lane.
+# NOTE on bgm_type: every profile picks a random track from resource/songs/.
 #
-# This is a copyright decision, not a taste one. The 29 tracks in
-# resource/songs/ came with the MoneyPrinterTurbo fork this repo is built on;
-# their licensing is unknown to us, and YouTube began issuing copyright claims
-# on uploads that used them.
+# Those tracks are from YouTube's own Audio Library, filtered to "no
+# attribution required", added 2026-09-28. They replaced the 29 files that came
+# with the MoneyPrinterTurbo fork, which drew segmented copyright claims on
+# YouTube and were deleted. Only put tracks you hold rights to in that folder:
+# get_bgm_file() picks any *.mp3 there, so one unlicensed file is enough to
+# bring the claims back.
 #
-# Turning the volume down does NOT help. Content ID matches an audio
-# fingerprint, so a claim lands just the same at 5% as at 100% -- quieter music
-# is a worse video with the same problem. Removal is the only fix that works.
+# Volume does not protect against claims -- Content ID matches the fingerprint
+# at any level; the old tracks were claimed at the default 0.2. Level here is
+# purely about sitting under the narration: see BGM_TARGET_LUFS below.
 #
-# Note that "" is load-bearing: the schema default for bgm_type is "random"
-# (app/models/schema.py), so leaving it None means music, not silence. That is
-# how all three lanes ended up with backing tracks nobody chose.
+# Note that the schema default for bgm_type is also "random", so None means
+# music, not silence. To turn music off, set "" explicitly.
+# Background music loudness, as a TARGET rather than a multiplier.
 #
-# To bring music back, put tracks YOU have the rights to (or verified
-# royalty-free, or from YouTube's own Audio Library) in resource/songs/, delete
-# the inherited ones, and set bgm_type to "random" again.
+# MoneyPrinter's bgm_volume multiplies the track as mastered, and the Audio
+# Library tracks differ by ~8 dB: the NEFFEX tracks measure about -8 LUFS
+# (far louder than the -14 streaming norm), the Green Orbs lullabies about
+# -15. A fixed 0.1 left NEFFEX near -28 LUFS -- still loud under the voice,
+# as the 2026-09-30 test Short showed -- and the lullabies nearly inaudible.
+# So the chosen track is measured at render time and scaled to this level.
+# Lower is quieter; move it in steps of 2-3 dB. -34 was judged a little too
+# quiet on the 2026-09-30 test Short (v9HRHrISOZ8); -28 (the old fixed 0.1
+# on NEFFEX) too loud.
+BGM_TARGET_LUFS = -32.0
+
+# Used only if measuring the track fails: quiet enough for the loudest track.
+BGM_FALLBACK_VOLUME = 0.05
+
+
+def _pick_bgm() -> tuple[str, float] | None:
+    """Choose a track and the gain that brings it to BGM_TARGET_LUFS.
+
+    Returns (filename relative to resource/songs, volume multiplier), or None
+    if the folder has no tracks. Picking here rather than leaving it to
+    MoneyPrinter's bgm_type="random" is what lets the gain match the track.
+    """
+    import glob, random, re, subprocess
+    song_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resource", "songs")
+    tracks = sorted(glob.glob(os.path.join(song_dir, "*.mp3")))
+    if not tracks:
+        return None
+    track = random.choice(tracks)
+    name = os.path.basename(track)
+    try:
+        out = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostats", "-i", track,
+             "-af", "ebur128=framelog=quiet", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=120,
+        ).stderr
+        # The summary block ends with "Integrated loudness: ... I: -8.1 LUFS".
+        lufs = float(re.findall(r"I:\s*(-?[\d.]+)\s*LUFS", out)[-1])
+        gain = round(10 ** ((BGM_TARGET_LUFS - lufs) / 20), 4)
+        print(f"[render] Music: {name} ({lufs:.1f} LUFS) -> gain {gain} "
+              f"for {BGM_TARGET_LUFS:.0f} LUFS")
+    except Exception as e:
+        gain = BGM_FALLBACK_VOLUME
+        print(f"[render] Music: {name}, loudness unmeasured ({str(e)[:80]}); "
+              f"using fallback gain {gain}")
+    return name, gain
+
 VARIANT_PROFILES = {
     "short": {
         "aspect": "9:16",
@@ -99,9 +144,11 @@ VARIANT_PROFILES = {
         # 66% down the frame: high enough to clear the Shorts/Reels UI buttons.
         "custom_position": 66.0,
         "n_threads": None,          # leave the schema default (2)
-        "bgm_type": "",             # no backing track -- see NOTE below
+        "bgm_type": "random",       # a licensed track -- see NOTE below
         "edge_tts_timeout": None,   # 30s default is plenty for ~80s of audio
         "instagram": True,
+        "youtube": True,
+        "ig_trial": None,
         "image_mode": False,
     },
     # Opt-in experiment: same 9:16 Short, but the backdrop is generated images
@@ -120,9 +167,11 @@ VARIANT_PROFILES = {
         "subtitle_position": "custom",
         "custom_position": 66.0,
         "n_threads": None,
-        "bgm_type": "",             # no backing track -- see NOTE below
+        "bgm_type": "random",       # a licensed track -- see NOTE below
         "edge_tts_timeout": None,
         "instagram": True,
+        "youtube": True,
+        "ig_trial": None,
         "image_mode": True,
     },
     "long": {
@@ -132,25 +181,39 @@ VARIANT_PROFILES = {
         # ~200 separate subclip encodes and only ~60s of unique footage; at 8s
         # it is ~75 encodes and each Pexels hit contributes 8s instead of 3s.
         "clip_duration": 8,
-        # Off deliberately. At ~250 cues the renderer builds every caption as a
-        # TextClip and composites them all at once, and its subtitle builder is
-        # all-or-nothing: one line mismatch writes NO file and only logs a
-        # warning, producing a silently caption-less video. YouTube
-        # auto-captions cover long-form, and unlike Shorts there is no platform
-        # UI to dodge. Proper uploaded captions are the v2 route.
-        "subtitle_enabled": False,
+        # On. It was off because a 2,000-word script is one long caption
+        # match: a single mismatched line makes the builder write no file at
+        # all. That failure is graceful -- the video still renders and posts,
+        # just without captions -- so the cost of trying is small, and
+        # captionless long-form was losing viewers within seconds. Whether a
+        # given video got captions is printed by render_video().
+        "subtitle_enabled": True,
         "font_size": 64,
         "subtitle_position": "bottom",
         "custom_position": 88.0,
         "n_threads": 4,             # ubuntu-latest has 4 vCPU; default 2 idles half
-        "bgm_type": "",             # no backing track -- see NOTE below
+        "bgm_type": "random",       # a licensed track -- see NOTE below
         # edge_tts applies ONE total timeout to the whole synthesis (a deadline
         # set once before the consume loop, app/services/voice.py). The 30s
         # default kills a 10-minute narration outright.
         "edge_tts_timeout": 900,
         "instagram": False,
+        "youtube": True,
+        "ig_trial": None,
         "image_mode": False,
     },
+}
+
+
+# Trial Reels: identical Shorts, shown on Instagram to NON-followers only, so a
+# format that misses never reaches the people who already follow. With
+# SS_PERFORMANCE Instagram shares a trial to followers itself when it does
+# well. Instagram-only on purpose: also posting it to YouTube would put every
+# trial in front of the YouTube audience and defeat the point.
+VARIANT_PROFILES["trial"] = {
+    **VARIANT_PROFILES["short"],
+    "youtube": False,
+    "ig_trial": "SS_PERFORMANCE",
 }
 
 
@@ -257,6 +320,12 @@ def build_payload(story: dict, variant: str = "short",
         payload["n_threads"] = p["n_threads"]
     if p["bgm_type"] is not None:
         payload["bgm_type"] = p["bgm_type"]
+    if p["bgm_type"]:
+        picked = _pick_bgm()
+        if picked:
+            # bgm_file wins over bgm_type="random" inside get_bgm_file(), and
+            # is resolved within resource/songs, so a bare filename is right.
+            payload["bgm_file"], payload["bgm_volume"] = picked
     if image_paths:
         # "local" makes task.py read video_materials instead of searching
         # Pexels; the key stays in the payload but goes unused.
@@ -310,6 +379,16 @@ def render_video(story: dict, variant: str = "short") -> str | None:
     if result.get("state") != 1:  # TASK_STATE_COMPLETE
         print(f"[render] Task did not complete successfully: state={result.get('state')}")
         return None
+
+    if p["subtitle_enabled"]:
+        # The caption builder fails silently (a logged warning, no file) when
+        # it cannot match the narration line for line, and the video renders
+        # anyway. Say so plainly, so a run of captionless videos is visible.
+        if result.get("subtitle_path"):
+            print("[render] Captions: burned in.")
+        else:
+            print("[render] Captions: MISSING -- the caption file could not be "
+                  "matched to the narration; this video has no captions.")
 
     # "videos" (final_video_paths) is the actual final output — subtitles
     # burned in, audio attached, via generate_video(). "combined_videos" is
@@ -444,6 +523,70 @@ def _ig_check(resp, step: str):
     raise RuntimeError(f"Instagram {step} returned HTTP {resp.status_code}: {body}")
 
 
+def _ig_transient(resp) -> bool:
+    """True when Meta is telling us to come back later rather than to fix something.
+
+    Meta marks recoverable failures itself: run #305 got
+
+        HTTP 500 {"error":{"message":"An unexpected error has occurred.
+        Please retry your request later.","type":"OAuthException",
+        "is_transient":true,"code":2}}
+
+    Note the type says OAuthException even though nothing is wrong with the
+    token -- Meta reuses that type broadly, so the type is NOT a reliable
+    signal and is deliberately not read here. is_transient and the status code
+    are. An expired token arrives as a 400 with is_transient absent, and must
+    NOT be retried: no amount of backoff fixes it, and retrying only delays
+    the alert that tells us to rotate it.
+    """
+    if resp.status_code >= 500:
+        return True
+    try:
+        return bool(resp.json().get("error", {}).get("is_transient"))
+    except Exception:
+        # A non-JSON body from a 4xx is not something to retry blindly.
+        return False
+
+
+def _ig_call(step: str, fn, attempts: int = 4):
+    """Make an Instagram request, retrying only what Meta says is retryable.
+
+    Instagram posting is the last thing a run does, after the video is already
+    live on YouTube, so a blip here turns a successful post into a failed run
+    and a Telegram alert -- exactly the pattern sb_retry was added for on the
+    Supabase side. Run #305 lost a Reel to a single 500 that asked to be
+    retried.
+
+    Backoff is 5/10/20s rather than sb_retry's 2/4/8: Meta's transient errors
+    are usually brief backend hiccups but not instant, and the job has time.
+
+    On publish specifically, a retry is safe because a creation_id can only be
+    published once -- if the first call did land despite the error, the retry
+    is rejected rather than posting a second Reel.
+    """
+    delay = 5.0
+    for attempt in range(attempts):
+        try:
+            resp = fn()
+        except (requests.Timeout, requests.ConnectionError) as e:
+            if attempt == attempts - 1:
+                raise RuntimeError(f"Instagram {step} failed to connect: {e}") from e
+            print(f"[instagram] {step} connection error ({str(e)[:120]}), "
+                  f"retrying in {delay:.0f}s ({attempt + 1}/{attempts - 1})")
+            time.sleep(delay)
+            delay *= 2
+            continue
+
+        if resp.ok:
+            return resp
+        if attempt == attempts - 1 or not _ig_transient(resp):
+            _ig_check(resp, step)      # raises with Meta's own explanation
+        print(f"[instagram] {step} returned HTTP {resp.status_code} (transient), "
+              f"retrying in {delay:.0f}s ({attempt + 1}/{attempts - 1})")
+        time.sleep(delay)
+        delay *= 2
+
+
 def resolve_ig_token(sb) -> str | None:
     """The live Instagram token: the auto-refreshed one if it is still valid.
 
@@ -469,7 +612,75 @@ def resolve_ig_token(sb) -> str | None:
     return env_token or None
 
 
-def upload_to_instagram(video_url: str, kit: dict, token: str) -> str | None:
+class _ContainerError(RuntimeError):
+    """Meta finished processing a container and rejected it (status ERROR)."""
+
+
+def _ig_container_reason(creation_id: str, token: str) -> str:
+    """Best-effort: ask Meta WHY a container failed. Never raises.
+
+    Deliberately a separate request, made only after ERROR is already known,
+    rather than a second field added to the routine status poll. The Graph API
+    answers an unrecognised field with a hard 400, and I could not verify from
+    Meta's reference (unreachable from the build environment) that the
+    container exposes a "status" detail field. Folded into the poll, a wrong
+    guess would have broken every Reel; isolated here, it costs one quiet
+    failed lookup and the Reel's handling is unchanged.
+    """
+    try:
+        resp = requests.get(
+            f"{GRAPH_API_BASE}/{creation_id}",
+            params={"fields": "status", "access_token": token},
+            timeout=30,
+        )
+        if resp.ok:
+            return str(resp.json().get("status") or "no detail given")
+        return f"reason lookup returned HTTP {resp.status_code}: {(resp.text or '')[:200]}"
+    except Exception as e:
+        return f"reason lookup failed: {str(e)[:120]}"
+
+
+def _ig_create_and_wait(ig_user_id: str, video_url: str, caption: str, token: str,
+                        trial: str | None = None) -> str:
+    """Create a Reel container and poll it to FINISHED. Returns the creation_id.
+
+    Raises _ContainerError when Meta rejects the container, so the caller can
+    decide to try a fresh one; any other failure propagates as before.
+    """
+    create_resp = _ig_call("media container creation", lambda: requests.post(
+        f"{GRAPH_API_BASE}/{ig_user_id}/media",
+        data={
+            "media_type": "REELS",
+            "video_url": video_url,
+            "caption": caption[:2200],
+            "access_token": token,
+            # Present only for trial Reels. Meta takes it as a JSON object.
+            **({"trial_params": json.dumps({"graduation_strategy": trial})} if trial else {}),
+        },
+        timeout=60,
+    ))
+    creation_id = create_resp.json()["id"]
+
+    # Poll until Instagram finishes downloading/processing the video
+    deadline = time.time() + 300
+    while time.time() < deadline:
+        status_resp = _ig_call("container status poll", lambda: requests.get(
+            f"{GRAPH_API_BASE}/{creation_id}",
+            params={"fields": "status_code", "access_token": token},
+            timeout=30,
+        ))
+        status = status_resp.json().get("status_code")
+        if status == "FINISHED":
+            return creation_id
+        if status == "ERROR":
+            reason = _ig_container_reason(creation_id, token)
+            raise _ContainerError(f"container {creation_id} rejected by Meta ({reason})")
+        time.sleep(10)
+    raise TimeoutError("Instagram container never finished processing")
+
+
+def upload_to_instagram(video_url: str, kit: dict, token: str,
+                        trial: str | None = None) -> str | None:
     """Publishes a Reel via the Instagram API (Instagram Login) using a temporary signed URL."""
     ig_user_id = os.environ["IG_USER_ID"]
 
@@ -477,43 +688,33 @@ def upload_to_instagram(video_url: str, kit: dict, token: str) -> str | None:
         f"#{h.lstrip('#')}" for h in kit["instagram_hashtags"]
     )
 
-    create_resp = requests.post(
-        f"{GRAPH_API_BASE}/{ig_user_id}/media",
-        data={
-            "media_type": "REELS",
-            "video_url": video_url,
-            "caption": caption[:2200],
-            "access_token": token,
-        },
-        timeout=60,
-    )
-    _ig_check(create_resp, "media container creation")
-    creation_id = create_resp.json()["id"]
-
-    # Poll until Instagram finishes downloading/processing the video
-    deadline = time.time() + 300
-    while time.time() < deadline:
-        status_resp = requests.get(
-            f"{GRAPH_API_BASE}/{creation_id}",
-            params={"fields": "status_code", "access_token": token},
-            timeout=30,
-        )
-        _ig_check(status_resp, "container status poll")
-        status = status_resp.json().get("status_code")
-        if status == "FINISHED":
+    # A container that reaches ERROR is dead -- it cannot be polled back into
+    # FINISHED -- so the retry for a processing failure is a fresh container,
+    # not another poll. Run #317 lost a Reel this way: the container was
+    # created fine, then Meta's processing rejected it within ~14 seconds,
+    # while YouTube had just accepted the identical file. That points at
+    # Meta's side rather than the video, and a new container is the remedy.
+    #
+    # One retry, not several. If the file genuinely is unacceptable, a second
+    # container fails the same way and the reason logged below says why;
+    # hammering it further would only delay the alert.
+    last_error = None
+    for container_attempt in range(2):
+        try:
+            creation_id = _ig_create_and_wait(ig_user_id, video_url, caption, token, trial)
             break
-        if status == "ERROR":
-            raise RuntimeError("Instagram container processing failed")
-        time.sleep(10)
+        except _ContainerError as e:
+            last_error = e
+            if container_attempt == 0:
+                print(f"[instagram] {e}; creating a fresh container and retrying once.")
     else:
-        raise TimeoutError("Instagram container never finished processing")
+        raise RuntimeError(f"Instagram container processing failed twice: {last_error}")
 
-    publish_resp = requests.post(
+    publish_resp = _ig_call("media publish", lambda: requests.post(
         f"{GRAPH_API_BASE}/{ig_user_id}/media_publish",
         data={"creation_id": creation_id, "access_token": token},
         timeout=60,
-    )
-    _ig_check(publish_resp, "media publish")
+    ))
     return publish_resp.json().get("id")
 
 
@@ -551,22 +752,25 @@ def main():
         sys.exit(1)
 
     youtube_id = None
-    try:
-        youtube_id = upload_to_youtube(video_path, story["publishing_kit"])
-        print(f"[main] Uploaded: https://youtube.com/watch?v={youtube_id}")
-    except Exception as e:
-        print(f"[main] YouTube upload failed: {e}")
-        # YouTube is the primary destination — release the claim so the next
-        # run retries this story instead of silently marking it "rendered"
-        # with no video ever having gone live, and fail the job so the
-        # Telegram failure alert actually fires instead of a false-green run.
-        sb_retry(
-            "release claim (youtube failed)",
-            lambda: sb.table("story_queue")
-            .update({"error": f"youtube upload failed: {e}", "claimed_at": None})
-            .eq("id", row["id"]).execute(),
-        )
-        sys.exit(1)
+    if not p["youtube"]:
+        print(f"[main] Skipping YouTube -- {variant} is Instagram-only.")
+    else:
+        try:
+            youtube_id = upload_to_youtube(video_path, story["publishing_kit"])
+            print(f"[main] Uploaded: https://youtube.com/watch?v={youtube_id}")
+        except Exception as e:
+            print(f"[main] YouTube upload failed: {e}")
+            # YouTube is the primary destination — release the claim so the next
+            # run retries this story instead of silently marking it "rendered"
+            # with no video ever having gone live, and fail the job so the
+            # Telegram failure alert actually fires instead of a false-green run.
+            sb_retry(
+                "release claim (youtube failed)",
+                lambda: sb.table("story_queue")
+                .update({"error": f"youtube upload failed: {e}", "claimed_at": None})
+                .eq("id", row["id"]).execute(),
+            )
+            sys.exit(1)
 
     instagram_id = None
     instagram_error = None
@@ -579,7 +783,8 @@ def main():
         storage_path = None
         try:
             storage_path, signed_url = get_signed_video_url(sb, video_path, row["id"])
-            instagram_id = upload_to_instagram(signed_url, story["publishing_kit"], ig_token)
+            instagram_id = upload_to_instagram(signed_url, story["publishing_kit"],
+                                               ig_token, trial=p["ig_trial"])
             print(f"[main] Posted to Instagram: media id {instagram_id}")
         except Exception as e:
             # Remembered, not swallowed. The state write below still happens so
@@ -587,12 +792,25 @@ def main():
             # non-zero so the Telegram alert fires — an Instagram outage used
             # to be invisible, reported as a fully successful run.
             instagram_error = str(e)
-            print(f"[main] Instagram publish failed (YouTube post is live): {e}")
+            print(f"[main] Instagram publish failed"
+                  f"{' (YouTube post is live)' if youtube_id else ''}: {e}")
         finally:
             if storage_path:
                 delete_from_storage(sb, storage_path)
     else:
         print("[main] Skipping Instagram — no usable token, or IG_USER_ID not set.")
+
+    if not p["youtube"] and not instagram_id:
+        # Instagram is this lane's only destination, so a failure here is a
+        # failed post, not a partial one: release the story for the next run.
+        reason = instagram_error or "no usable Instagram token or IG_USER_ID"
+        sb_retry(
+            "release claim (instagram failed)",
+            lambda: sb.table("story_queue")
+            .update({"error": f"instagram: {reason}", "claimed_at": None})
+            .eq("id", row["id"]).execute(),
+        )
+        sys.exit(f"[main] {variant}: Instagram did not publish ({reason}); story released.")
 
     dna = story["dna"]
     # Everything below is bookkeeping: the video is already live on YouTube.
@@ -612,6 +830,12 @@ def main():
         "curve": story["curve"],
         "score": story["score"],
         "tracking_tag": story["tracking_tag"],
+        # Closes the rotation loop: pick_cta_style reads this back out of
+        # story_state on the next generation run. .get() because stories queued
+        # before the rotation existed do not carry it.
+        "cta_style": story.get("cta_style"),
+        # Hook/CTA experiment arm; NULL for stories queued before it began.
+        "experiment_arm": story.get("experiment_arm"),
         "youtube_id": youtube_id,
         "instagram_id": instagram_id,
     }
