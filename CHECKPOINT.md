@@ -9,16 +9,24 @@ is still open. Update this in place rather than adding dated copies.
 |---|---|---|---|
 | `short` | 4x daily | YouTube + Instagram | Cloudflare Worker, 03:00 / 07:00 / 11:15 / 15:00 UTC |
 | `long` (generate) | 1x daily | Supabase queue | GitHub cron, `0 13 * * *` |
-| `long` (render) | 1x daily | YouTube only | GitHub cron, `30 19 * * *` |
+| `long` (render) | 1x daily | YouTube only | Cloudflare Worker, `30 21 * * *` (03:00 IST) |
 | `illustrated` | manual | YouTube (unlisted) | none — experiment |
+| `trial` | paused (manual dispatch only) | Instagram trial Reels | GitHub cron `0 16 * * *`, commented out |
 | character video | manual, once | not posted yet | none — experiment, RunPod pod |
-| metrics | 1x daily | Supabase | GitHub cron, `30 2 * * *` |
+| metrics | 1x daily | Supabase (YouTube + Instagram) | GitHub cron, `30 2 * * *` |
 | IG token refresh | weekly | Supabase | GitHub cron, `0 1 * * 1` |
 
-The long lane's cron asks for 19:30 UTC to land near 21:30. GitHub queues
-scheduled workflows rather than firing them on time; measured over five
-consecutive nights the delay was 2h24, 2h03, 2h11, 2h05, 1h54 — mean 2h07,
-spread ±15 min. Re-measure from the run list if the posting time drifts.
+**The long render runs on the Worker, not GitHub's cron.** GitHub queues
+scheduled workflows 2–3h late on this repo. The Worker's `30 21 * * *`
+trigger, long silent, started firing on 2026-09-21 while the GitHub schedule
+was still active, so long-form posted twice a night until the GitHub schedule
+was removed (#29). Only one of the two may ever schedule it.
+
+**The `trial` lane** posts one Instagram trial Reel (shown to non-followers
+only, graduates to followers if it performs) and never posts to YouTube. Its
+cron is commented out: Meta refused the first one with "Trial Reel Not Enough
+Followers" (error_subcode 2207081). Restore the cron once the account
+qualifies.
 
 **Long-form generation is a separate workflow from long-form rendering**, and
 that separation is load-bearing. They shared a slot until run #14, which found
@@ -56,13 +64,20 @@ how recently a video was posted — anything older than ~5 days barely moves.
   The `IG_ACCESS_TOKEN` secret is only the seed for the first refresh and the
   way back in if the stored one ever lapses. Instagram tokens cannot be
   refreshed once expired, which is why the job runs weekly rather than monthly.
-- **The Cloudflare Worker's `30 21 * * *` trigger has never fired.** Its other
-  four crons work. The long lane runs on GitHub's cron instead.
-- **Groq 429s now wait, and say why.** The backoff honours a reported reset up
-  to 120s over 6 attempts (it used to clip every wait to 30s, which could not
-  ride out a per-minute token cap), and each retry logs Groq's response body.
-  A per-minute limit and an exhausted daily quota are both a bare `429` and
-  need opposite responses; the body is the only thing that tells them apart.
+- **Groq 429s: per-minute limits wait, daily quotas don't.** A per-minute 429
+  backs off (up to 120s, 6 attempts). A daily-quota 429 (TPD) moves straight to
+  the next model in the chain, and when every model is out the generators stop
+  with `GroqQuotaExhausted`. All top-up steps are `continue-on-error`, so a
+  generation failure can't cost a render that already has a story queued.
+- **Background music is back**, from 15 YouTube Audio Library tracks in
+  `resource/songs/`, levelled by loudness. The inherited MoneyPrinterTurbo
+  tracks drew copyright claims and were deleted, not just disabled:
+  `get_bgm_file()` picks any `*.mp3` in that folder, so one unlicensed file
+  brings the claims back.
+- **Follower stories:** a consented, hand-written summary in
+  `story_submissions` is written into the Shorts queue ahead of everything
+  else, with every name and detail changed. Kept in Supabase rather than a
+  workflow input because this repo is public.
 - **Failures that are not failures.** A run can exit non-zero with the video
   already live on YouTube — that is deliberate, so an Instagram or bookkeeping
   problem cannot pass silently. Read the log before assuming nothing posted.
@@ -107,8 +122,6 @@ Where it is heading (budget: $20/month, one story a day):
 
 ## Open items
 
-- Delete the Worker's `30 21 * * *` cron trigger in the Cloudflare dashboard.
-  Harmless today, a double-post if it ever wakes up.
 - Drop the dead `GOOGLE_CLIENT_SECRET_JSON` references from both workflows.
 - Point the image provider at a router once its API shape is known. Keep
   Pollinations as the keyless fallback, and parallelise the frame fetches —
