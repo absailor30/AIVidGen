@@ -89,6 +89,32 @@ def published_video_ids(sb) -> list[str]:
     return ids
 
 
+def google_call(label: str, request, attempts: int = 4):
+    """Execute a Google API request, retrying transient server-side failures.
+
+    Run #26 (2026-10-05) died on a single YouTube Analytics 500 backendError
+    ("Internal error encountered.") -- Google's side, gone on the next try --
+    and because that call comes before the snapshot write, the whole day's
+    metrics were lost. 5xx and 429 are retried with 5/10/20s backoff; any
+    other error (a 403 for a missing scope, a 400 for a bad query) is a real
+    problem and is raised at once.
+    """
+    import time
+    from googleapiclient.errors import HttpError
+    delay = 5.0
+    for attempt in range(attempts):
+        try:
+            return request.execute()
+        except HttpError as e:
+            status = getattr(e.resp, "status", 0)
+            if not (status >= 500 or status == 429) or attempt == attempts - 1:
+                raise
+            print(f"[metrics] {label}: HTTP {status}, retrying in {delay:.0f}s "
+                  f"({attempt + 1}/{attempts - 1})")
+            time.sleep(delay)
+            delay *= 2
+
+
 def fetch_public_stats(creds, video_ids: list[str]) -> dict[str, dict]:
     """views/likes/comments, keyed by video id."""
     from googleapiclient.discovery import build
@@ -97,7 +123,8 @@ def fetch_public_stats(creds, video_ids: list[str]) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for i in range(0, len(video_ids), DATA_BATCH):
         chunk = video_ids[i:i + DATA_BATCH]
-        resp = youtube.videos().list(part="statistics", id=",".join(chunk)).execute()
+        resp = google_call("public stats",
+                           youtube.videos().list(part="statistics", id=",".join(chunk)))
         for item in resp.get("items", []):
             s = item.get("statistics", {})
             out[item["id"]] = {
@@ -124,7 +151,7 @@ def fetch_retention(creds, video_ids: list[str]) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for i in range(0, len(video_ids), ANALYTICS_BATCH):
         chunk = video_ids[i:i + ANALYTICS_BATCH]
-        resp = analytics.reports().query(
+        resp = google_call("retention averages", analytics.reports().query(
             ids="channel==MINE",
             startDate=ANALYTICS_START,
             endDate=today,
@@ -132,7 +159,7 @@ def fetch_retention(creds, video_ids: list[str]) -> dict[str, dict]:
             metrics="estimatedMinutesWatched,averageViewDuration,averageViewPercentage",
             filters="video==" + ",".join(chunk),
             maxResults=len(chunk),
-        ).execute()
+        ))
         # Column order is described by the response, not assumed.
         cols = [h["name"] for h in resp.get("columnHeaders", [])]
         for row in resp.get("rows", []):
@@ -185,14 +212,14 @@ def fetch_retention_curve(analytics, video_id: str) -> list[dict]:
     beat, before the payoff -- and only the curve can say whether that is a
     steady slide or a cliff at one sentence.
     """
-    resp = analytics.reports().query(
+    resp = google_call(f"curve {video_id}", analytics.reports().query(
         ids="channel==MINE",
         startDate=ANALYTICS_START,
         endDate=date.today().isoformat(),
         dimensions="elapsedVideoTimeRatio",
         metrics="audienceWatchRatio,relativeRetentionPerformance",
         filters=f"video=={video_id}",
-    ).execute()
+    ))
     cols = [h["name"] for h in resp.get("columnHeaders", [])]
     return [dict(zip(cols, row)) for row in resp.get("rows", [])]
 
@@ -384,8 +411,16 @@ def main():
     # likely absent on first run. Check up front and degrade rather than dying
     # three API calls in with a 403 the alert cannot explain.
     scopes = set(getattr(creds, "scopes", None) or [])
+    retention_failed = False
     if ANALYTICS_SCOPE in scopes:
-        retention = fetch_retention(creds, video_ids)
+        try:
+            retention = fetch_retention(creds, video_ids)
+        except Exception as e:
+            # Keep going: views/likes/comments are still worth recording, and
+            # the job still exits non-zero at the end so the alert fires.
+            retention, retention_failed = {}, True
+            print(f"[metrics] Retention averages failed after retries ({str(e)[:160]}); "
+                  f"writing public stats without them.")
     else:
         retention = {}
         print(f"[metrics] Skipping retention: token lacks {ANALYTICS_SCOPE}.\n"
@@ -427,6 +462,9 @@ def main():
     except Exception as e:
         print(f"[metrics] IG: collection crashed ({str(e)[:160]}); YouTube data above is saved.")
 
+    if retention_failed:
+        sys.exit("[metrics] YouTube Analytics failed after retries; today's snapshot "
+                 "was written without watch time or retention.")
     if ANALYTICS_SCOPE in scopes and curves_all_failed:
         sys.exit("[metrics] Every retention curve request failed. "
                  "The daily snapshot above was still written.")
