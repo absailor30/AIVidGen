@@ -680,7 +680,15 @@ def _mark_submission(sb, sub_id: int, **fields):
         print(f"[generate] Could not update submission {sub_id}: {str(e)[:100]}")
 
 
-def pick_theme(state_rows: list, variant: str | None = None) -> str:
+# No theme more than this many times in a row. The deficit rule alone lets a
+# theme that has fallen far behind win every pick until it catches up: from
+# 2026-09-28 to 09-30 that was seven "Friendship Betrayal" stories back to
+# back, and that stretch was the weakest of the fortnight.
+MAX_THEME_STREAK = 2
+
+
+def pick_theme(state_rows: list, variant: str | None = None,
+               queued: list | None = None) -> str:
     """Least-used theme. Scoped per variant when given, so a long video does not
     starve the short rotation of a theme (different audiences, independent cycles)."""
     rows = state_rows
@@ -699,7 +707,16 @@ def pick_theme(state_rows: list, variant: str | None = None) -> str:
     # publishing schedule).
     total = sum(counts.values()) + 1  # +1: the story this call is about to make
     weight_sum = sum(THEME_WEIGHTS.values())
-    return max(THEMES, key=lambda t: THEME_WEIGHTS[t] / weight_sum * total - counts[t])
+
+    # The streak is judged on what viewers will actually see in order:
+    # published stories (rows read from story_state carry an id; ones appended
+    # during this run do not, and are counted via `queued` instead), then
+    # everything already queued, in queue order.
+    history = [r.get("theme") for r in rows if r.get("id") is not None] + list(queued or [])
+    tail = history[-MAX_THEME_STREAK:]
+    blocked = tail[0] if len(tail) == MAX_THEME_STREAK and len(set(tail)) == 1 else None
+    candidates = [t for t in THEMES if t != blocked] or THEMES
+    return max(candidates, key=lambda t: THEME_WEIGHTS[t] / weight_sum * total - counts[t])
 
 
 def main():
@@ -731,17 +748,18 @@ def main():
     # cta_style is selected because pick_cta_style rotates on it. Leave it out
     # and every run sees None, picks the first style, and "rotation" becomes a
     # single CTA forever.
+    # Ordered by id: the theme streak cap reads these in posting order.
     state_rows = sb.table("story_state").select(
-        "variant,theme,hook,fingerprint,curve,cta_style,experiment_arm"
-    ).execute().data
+        "id,variant,theme,hook,fingerprint,curve,cta_style,experiment_arm"
+    ).order("id").execute().data
     # Arms already handed out: published stories plus those still queued.
     assigned_arms = [r.get("experiment_arm") for r in state_rows
                      if (r.get("variant") or "short") == variant]
-    assigned_arms += [
-        (r.get("payload") or {}).get("experiment_arm") for r in
-        sb.table("story_queue").select("payload").is_("claimed_at", "null")
-        .eq("variant", variant).execute().data
-    ]
+    queue_rows = (sb.table("story_queue").select("theme,payload").is_("claimed_at", "null")
+                  .eq("variant", variant).order("id").execute().data)
+    assigned_arms += [(r.get("payload") or {}).get("experiment_arm") for r in queue_rows]
+    # Themes waiting to post, in order; extended as this run queues more.
+    queued_themes = [r.get("theme") for r in queue_rows]
 
     written = 0
     attempts = 0
@@ -749,7 +767,7 @@ def main():
     while (unclaimed + written < target or pending) and attempts < max_attempts:
         attempts += 1
         sub = pending[0] if pending else None
-        theme = pick_theme(state_rows, variant=variant)
+        theme = pick_theme(state_rows, variant=variant, queued=queued_themes)
         cta_style = pick_cta_style(state_rows, variant=variant)
         arm = pick_experiment_arm(assigned_arms)
         recent = [r for r in state_rows if r.get("theme") == theme][-25:]
@@ -795,6 +813,7 @@ def main():
                                 # rotates neither the CTA nor the arm.
                                 "cta_style": cta_style, "experiment_arm": arm})
             assigned_arms.append(arm)
+            queued_themes.append(story["theme"])
             written += 1
             print(f"[generate] Queued: {story['title']} ({story['theme']}, {arm}, {cta_style})")
         except GroqQuotaExhausted as e:
