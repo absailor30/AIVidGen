@@ -86,6 +86,44 @@ Used only for story beats about hands or feet (nails tapping, heels walking away
 In a formal story, pair `_formal_close` + `_formal_ref` instead of the casual
 pair.
 
+## Step F — story-theme looks (attach `{actor}_ref`)
+
+Extra outfits so each actor looks right for the setting their stories use.
+Same three images per look as Step E, same prompts with **[LOOK OUTFIT]** in
+place of the formal outfit: `{actor}_{look}_ref` (attach `{actor}_ref`), then
+`{actor}_{look}_close` and `{actor}_{look}_medium` (attach `{actor}_{look}_ref`).
+
+| Actor | Look | Themes | [LOOK OUTFIT] |
+|---|---|---|---|
+| Maya | `v2` new everyday look (replaces the sneakers look for new stories) | all | fitted mustard yellow blazer over a white silk camisole, slim high-waisted dark jeans, tan strappy block-heel sandals showing a nude-pink pedicure, nude-pink almond nails, small gold hoops |
+| Maya | `office` | Career | tailored mustard blazer, cream silk blouse, black pencil skirt, nude pointed-toe pumps |
+| Maya | `home` | In-law, Sibling, Marriage | soft cream knit sweater, light blue jeans, tan heeled mules |
+| Maya | `dinner` | Wedding, Sibling, Marriage | fitted mustard satin midi dress, gold strappy stiletto sandals, gold hoops |
+| Vanessa | `office` | Career | sleek black blazer dress, red pointed-toe stiletto pumps |
+| Vanessa | `dinner` | Wedding, Sibling, Marriage | red bodycon cocktail dress, red stiletto sandals showing a red pedicure |
+| Daniel | `home` | In-law, Sibling, Inheritance | navy cable-knit sweater over a white collared shirt, grey trousers, brown loafers |
+| Eleanor | `home` | In-law, Wedding planning | cream silk blouse, camel tailored trousers, pearls, nude kitten-heel slingbacks |
+| Richard | `home` | In-law, Sibling, Inheritance | grey wool cardigan over a light blue shirt, dark trousers, brown loafers |
+| Chloe | `party` | Wedding, Sibling | sparkly silver sequin mini dress, silver strappy stiletto sandals |
+| Chloe | `home` | Sibling, In-law | baby-pink satin shirt and wide-leg trousers, pink heeled mules |
+| Ethan | `office` | Career, Marriage | fitted charcoal suit, white shirt, navy tie, black oxfords |
+| Ethan | `home` | Marriage, In-law | fitted navy henley, dark jeans, white sneakers |
+| Marcus | `home` | Marriage, In-law | fitted black t-shirt, dark jeans, black leather boots |
+| Priya | `office` | Career, Landlord | fitted ivory blazer, lavender silk blouse, grey pencil skirt, nude pumps |
+| Priya | `home` | In-law, Landlord | lavender embroidered kurta top, white slim trousers, gold heeled sandals |
+| Jade | `office` | Career, Marriage | fitted white shirt dress with a thin black belt, black pointed stilettos |
+| Tyler | `office` | Sibling, Inheritance, Career | sharp light-grey slim suit, white shirt, no tie, white leather sneakers |
+| Sam | `office` | Career, Friendship | coral blazer over a white top, slim black trousers, tan block-heel pumps |
+| Sam | `dinner` | Wedding, Marriage | fitted coral satin slip dress, nude strappy stiletto sandals |
+| Linda | `home` | In-law, Wedding | elegant burgundy knit twin set, black tailored trousers, burgundy kitten-heel slingbacks |
+
+21 looks × 3 = **63 more images**. Maya's `v2` is made first: change the
+outfit **from her existing ref**, never with a new text-only base, or her face
+changes. The old sneakers look stays for "The Stolen Pitch" and batch 1.
+
+The live checklist with copy-ready prompts for every image (366 total) is the
+Cast Reference Tracker artifact: https://claude.ai/artifact/FmoDcows7SWiVm7HJwoXxH
+
 ---
 
 ## Cast list
