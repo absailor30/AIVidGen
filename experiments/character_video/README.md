@@ -70,7 +70,7 @@ Ref2VA and assembled with edge-tts + ffmpeg.
 
 Scripts: `pod/start.sh`, `pod/tunnel.sh`, `pod/build_sageattention.sh`.
 
-Recurring cast (16 actors, theme research, Flow prompts): `cast_plan.md`.
+Recurring cast (16 actors, theme research): `cast_plan.md`. Every Flow prompt for every reference view: `flow_prompt_pack.md`.
 
 ## Before posting
 
