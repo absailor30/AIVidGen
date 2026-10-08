@@ -4,7 +4,17 @@ on:
   # Scheduling is driven by Cloudflare Cron Triggers (see cloudflare_worker.js),
   # which fire on time — GitHub's own cron lagged 1-3hrs on free tier. The
   # Worker calls this workflow via workflow_dispatch at each slot.
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: "Lane to render: short (stock footage) or cartoon. Empty = short, unless .github/cartoon_slots names this hour."
+        required: false
+        default: ""
+      dry_run:
+        description: "Render only: attach the video to the run, post nothing, put the story back in the queue."
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   render:
@@ -25,6 +35,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The Worker dispatches with no inputs, so a slot handed to the cartoon
+      # lane is listed in .github/cartoon_slots as a UTC hour (2026-10-08T17).
+      # One line per slot; anything not listed stays on stock footage.
+      - name: Pick lane for this slot
+        id: lane
+        shell: bash
+        run: |
+          V="${{ inputs.variant }}"
+          HOUR=$(date -u +%Y-%m-%dT%H)
+          if [ -z "$V" ] && grep -qx "$HOUR" .github/cartoon_slots 2>/dev/null; then
+            V=cartoon; echo "Slot $HOUR is listed in .github/cartoon_slots"
+          fi
+          echo "variant=${V:-short}" >> "$GITHUB_OUTPUT"
+          echo "Lane: ${V:-short}"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -34,6 +59,17 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
+
+      - uses: actions/setup-node@v4
+        if: steps.lane.outputs.variant == 'cartoon'
+        with:
+          node-version: "22"
+
+      - name: Install HyperFrames
+        if: steps.lane.outputs.variant == 'cartoon'
+        run: |
+          npm install -g hyperframes@0.8.141
+          hyperframes browser ensure
 
       # Best effort, as in story_render_long.yml. On 2026-09-30 Groq's daily
       # token allowance ran out and this step retried until the job hit its
@@ -60,6 +96,12 @@ jobs:
 
       - name: Render + upload next queued story
         env:
+          STORY_VARIANT: ${{ steps.lane.outputs.variant }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          HYPERFRAMES_CMD: hyperframes
+          # The cartoon lane asks Groq for its scene plan; it falls back to a
+          # keyword plan when this is missing or out of quota.
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
@@ -73,9 +115,14 @@ jobs:
         shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
         run: python render_from_supabase.py 2>&1 | tee -a /tmp/pipeline.log
 
-      # Send the actual error, not just a link. A bare "it failed" meant every
-      # past alert required opening Actions to learn anything; the tail of the
-      # log is usually enough to tell a retired model from a real bug.
+      - name: Attach dry-run video
+        if: inputs.dry_run
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview
+          path: /tmp/preview.mp4
+          if-no-files-found: warn
+
       # Send the actual error, not just a link. A bare "it failed" meant every
       # past alert required opening Actions to learn anything; the tail of the
       # log is usually enough to tell a retired model from a real bug.

@@ -217,6 +217,19 @@ VARIANT_PROFILES["trial"] = {
 }
 
 
+# Cartoon: the same Short, drawn instead of filmed. Each beat of the story is
+# its own animated scene (setting, characters with expressions, the texts or
+# document the narration mentions), rendered by HyperFrames through
+# cartoon_render.py. Draws from the short queue -- any short story works -- but
+# records variant "cartoon" in story_state, so its views are compared against
+# the stock lane rather than mixed in with it.
+VARIANT_PROFILES["cartoon"] = {
+    **VARIANT_PROFILES["short"],
+    "renderer": "cartoon",
+    "queue": "short",
+}
+
+
 def _profile(variant: str) -> dict:
     try:
         return VARIANT_PROFILES[variant]
@@ -339,6 +352,19 @@ def build_payload(story: dict, variant: str = "short",
 
 def render_video(story: dict, variant: str = "short") -> str | None:
     p = _profile(variant)
+
+    if p.get("renderer") == "cartoon":
+        import cartoon_render
+
+        out = os.path.join(utils.storage_dir(), "cartoon", f"{utils.get_uuid()}.mp4")
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        picked = _pick_bgm()
+        bgm = (os.path.join(utils.song_dir(), picked[0]), picked[1]) if picked else None
+        try:
+            return cartoon_render.render(story, out, bgm)
+        except Exception as e:
+            print(f"[render] Cartoon render failed: {e}")
+            return None
 
     # edge_tts applies a single TOTAL timeout to the whole synthesis, so a long
     # narration needs it raised or it is killed at 30s. Same injection pattern
@@ -726,7 +752,7 @@ def main():
           f"subtitles {'on' if p['subtitle_enabled'] else 'off'})")
     sb = supabase_client()
 
-    row = claim_next_story(sb, theme, variant)
+    row = claim_next_story(sb, theme, p.get("queue", variant))
     if not row:
         # Nothing to post is a failure, not a no-op: it means generation is
         # broken upstream. Exit non-zero so the Telegram alert fires rather
@@ -750,6 +776,18 @@ def main():
             .eq("id", row["id"]).execute(),
         )
         sys.exit(1)
+
+    if os.environ.get("DRY_RUN"):
+        import shutil
+        shutil.copy(video_path, "/tmp/preview.mp4")
+        sb_retry(
+            "release claim (dry run)",
+            lambda: sb.table("story_queue").update({"claimed_at": None})
+            .eq("id", row["id"]).execute(),
+        )
+        print("[main] Dry run: video saved to /tmp/preview.mp4, nothing posted, "
+              "story returned to the queue.")
+        return
 
     youtube_id = None
     if not p["youtube"]:
