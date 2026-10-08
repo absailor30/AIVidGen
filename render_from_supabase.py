@@ -436,6 +436,9 @@ def _youtube_credentials():
     return creds
 
 
+YOUTUBE_UPLOAD_ATTEMPTS = 3
+
+
 def upload_to_youtube(video_path: str, kit: dict) -> str | None:
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
@@ -465,11 +468,29 @@ def upload_to_youtube(video_path: str, kit: dict) -> str | None:
         body["status"]["publishAt"] = publish_at
         body["status"]["privacyStatus"] = "private"
         print(f"[render] Scheduling publish for {publish_at} (uploading private).")
-    media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
-    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
-    response = None
-    while response is None:
-        _, response = request.next_chunk()
+    # A resumable upload session can die on Google's side mid-transfer: run
+    # #361 rendered fine and then got "410 Gone" on the upload. A 410/404 means
+    # that session is unusable, and 5xx/429 are transient, so start a fresh
+    # session rather than failing the slot. Nothing is published until the
+    # upload completes, so a retry cannot double-post.
+    from googleapiclient.errors import HttpError
+
+    for attempt in range(1, YOUTUBE_UPLOAD_ATTEMPTS + 1):
+        media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
+        request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+        try:
+            response = None
+            while response is None:
+                _, response = request.next_chunk()
+            break
+        except HttpError as e:
+            status = getattr(e.resp, "status", 0)
+            if attempt == YOUTUBE_UPLOAD_ATTEMPTS or not (status in (404, 410, 429) or status >= 500):
+                raise
+            wait = 15 * attempt
+            print(f"[render] YouTube upload attempt {attempt} failed ({status}); "
+                  f"retrying with a fresh upload in {wait}s.")
+            time.sleep(wait)
     video_id = response.get("id")
 
     playlist_id = os.environ.get("YOUTUBE_PLAYLIST_ID")
