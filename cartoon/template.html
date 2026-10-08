@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1080, height=1920" />
+<script src="gsap.min.js"></script>
+<style>
+@font-face{font-family:Fredoka;font-weight:500;src:url(fredoka-500.ttf) format('truetype')}
+@font-face{font-family:Fredoka;font-weight:700;src:url(fredoka-700.ttf) format('truetype')}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1080px;height:1920px;overflow:hidden;background:#ffe9c7}
+#root{position:relative;width:1080px;height:1920px;font-family:Fredoka,sans-serif;overflow:hidden;background:#ffe9c7}
+.abs{position:absolute}
+.scene{position:absolute;inset:0;opacity:0}
+.cam{position:absolute;inset:0;transform-origin:50% 60%}
+.bg{position:absolute;left:0;top:0}
+.ch{position:absolute;top:640px;width:560px;height:1085px}
+.ch.l{left:20px}.ch.r{left:500px}.ch.c{left:260px}
+.label{position:absolute;left:50px;right:50px;top:150px;text-align:center;font-size:76px;font-weight:700;color:#fff;
+  -webkit-text-stroke:6px #2b1d3a;paint-order:stroke fill;line-height:1.08}
+.phone{position:absolute;left:540px;top:620px;width:480px;height:860px;background:#2b1d3a;border-radius:56px;padding:22px}
+.screen{width:100%;height:100%;background:#f4f1ff;border-radius:38px;overflow:hidden;position:relative}
+.ph-top{height:116px;background:#7c5cff;color:#fff;font-size:38px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 20px;text-align:center}
+.bub{position:relative;margin:26px 22px 0;max-width:390px;background:#fff;border-radius:30px 30px 30px 8px;padding:18px 24px;
+  font-size:34px;font-weight:500;color:#2b1d3a;box-shadow:0 6px 0 #d6cff7}
+.bub.last{background:#ffd1dc}
+.call{position:absolute;inset:0;background:linear-gradient(#3b2b6e,#1c1436);color:#fff;text-align:center}
+.call .who{margin-top:190px;font-size:52px;font-weight:700}
+.call .sub{margin-top:14px;font-size:32px;opacity:.8}
+.call .av{width:190px;height:190px;border-radius:50%;background:#ffd84a;margin:60px auto 0;border:8px solid #fff;font-size:110px;line-height:175px;color:#2b1d3a;font-weight:700}
+.call .btns{position:absolute;bottom:90px;left:0;right:0;display:flex;justify-content:space-around}
+.call .btn{width:120px;height:120px;border-radius:50%}
+.doc{position:absolute;left:520px;top:640px;width:500px;height:700px;background:#fffdf5;border:8px solid #2b1d3a;border-radius:18px;padding:40px 36px;
+  box-shadow:14px 14px 0 rgba(43,29,58,.25);transform:rotate(3deg)}
+.doc .dt{font-size:44px;font-weight:700;color:#2b1d3a;text-align:center;margin-bottom:28px}
+.doc .ln{height:18px;background:#e6e0d0;border-radius:9px;margin:20px 0}
+.doc .hl{font-size:36px;font-weight:700;color:#2b1d3a;background:#ffe14d;padding:10px 14px;border-radius:8px;margin:26px 0;line-height:1.2}
+.doc .stamp{position:absolute;right:30px;bottom:40px;border:7px solid #e0313f;color:#e0313f;font-size:40px;font-weight:700;padding:6px 18px;border-radius:10px;transform:rotate(-14deg)}
+.fx{position:absolute;font-size:120px;font-weight:700;color:#e0313f;-webkit-text-stroke:5px #2b1d3a;paint-order:stroke fill;opacity:0}
+#flash{position:absolute;inset:0;background:#fff;opacity:0}
+#caps{position:absolute;left:40px;right:40px;top:1300px;height:200px}
+.cg{position:absolute;left:0;right:0;top:0;text-align:center;font-size:84px;font-weight:700;color:#fff;
+  -webkit-text-stroke:7px #2b1d3a;paint-order:stroke fill;opacity:0;line-height:1.05}
+.cw{display:inline-block;margin:0 9px}
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="__DURATION__" data-width="1080" data-height="1920">
+  <div id="stage" class="abs" style="inset:0"></div>
+  <div id="caps"></div>
+  <div id="flash"></div>
+</div>
+<script>
+const PLAN = __PLAN__;
+const INK = "#2b1d3a";
+const SW = 10;
+
+/* ---------- cast ---------- */
+const CAST = {
+  narrator:{skin:"#e0a57c",hair:"#3a2440",style:"long",outfit:"#ff7a8a",fem:true},
+  mom:{skin:"#d99a6c",hair:"#8a8a94",style:"bun",outfit:"#7c5cff",fem:true,old:true},
+  dad:{skin:"#c98b62",hair:"#9a9aa4",style:"short",outfit:"#3d7dd8",beard:"mous",old:true,glasses:true},
+  brother:{skin:"#d19a70",hair:"#2b1d3a",style:"spiky",outfit:"#33b07a"},
+  sister:{skin:"#e8b08a",hair:"#7a3b1e",style:"pony",outfit:"#ffb020",fem:true},
+  husband:{skin:"#c48a5e",hair:"#1e1426",style:"short",outfit:"#2f4b7c",beard:"stub"},
+  wife:{skin:"#e5ab84",hair:"#5a2e1a",style:"long",outfit:"#e05a9a",fem:true},
+  boyfriend:{skin:"#d6a077",hair:"#3b2414",style:"spiky",outfit:"#e2553d"},
+  girlfriend:{skin:"#f0c09a",hair:"#c9772a",style:"pony",outfit:"#1fb5b0",fem:true},
+  mil:{skin:"#d4956a",hair:"#b9b9c2",style:"bun",outfit:"#c2185b",fem:true,old:true,glasses:true},
+  fil:{skin:"#bf845b",hair:"#c4c4cc",style:"bald",outfit:"#6d4c41",beard:"full",old:true},
+  grandma:{skin:"#dba57e",hair:"#ececf2",style:"bun",outfit:"#8e7cc3",fem:true,old:true,glasses:true},
+  boss:{skin:"#e2b48e",hair:"#555",style:"bald",outfit:"#37474f",tie:true,glasses:true},
+  friend:{skin:"#b97a52",hair:"#141018",style:"curly",outfit:"#ffca28",fem:true},
+  lawyer:{skin:"#cf9a72",hair:"#2a2a2a",style:"short",outfit:"#263238",tie:true,glasses:true},
+  cousin:{skin:"#d8a27a",hair:"#4a2a10",style:"curly",outfit:"#8bc34a"},
+  kid:{skin:"#ecb991",hair:"#3b2414",style:"short",outfit:"#29b6f6",kid:true},
+  stranger:{skin:"#c9936b",hair:"#3a3a3a",style:"short",outfit:"#9e9e9e"},
+};
+
+function hairBack(c){
+  if(c.style==="long") return `<path d="M120 400 C110 170 450 170 440 400 L470 760 L90 760Z" fill="${c.hair}" stroke="${INK}" stroke-width="${SW}"/>`;
+  if(c.style==="curly") return `<g fill="${c.hair}" stroke="${INK}" stroke-width="${SW}">${[[150,330],[200,230],[280,190],[360,230],[410,330],[120,460],[440,460]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="80"/>`).join("")}</g>`;
+  return "";
+}
+function hairFront(c){
+  const h=c.hair;
+  switch(c.style){
+    case "long": case "pony": return `<path d="M110 390 C130 210 430 210 450 390 C370 300 230 300 110 390Z" fill="${h}"/>`+(c.style==="pony"?`<path d="M430 300 C540 330 560 520 500 640 C480 520 460 420 420 360Z" fill="${h}" stroke="${INK}" stroke-width="${SW}"/>`:"");
+    case "bun": return `<circle cx="280" cy="170" r="70" fill="${h}" stroke="${INK}" stroke-width="${SW}"/><path d="M115 380 C130 210 430 210 445 380 C380 290 180 290 115 380Z" fill="${h}" stroke="${INK}" stroke-width="${SW}"/>`;
+    case "spiky": return `<path d="M110 360 L140 240 L190 290 L220 190 L270 270 L310 180 L340 270 L390 200 L410 290 L450 250 L450 360 C380 300 180 300 110 360Z" fill="${h}" stroke="${INK}" stroke-width="${SW}"/>`;
+    case "short": return `<path d="M110 370 C110 200 450 200 450 370 C430 300 380 280 280 285 C180 280 130 300 110 370Z" fill="${h}" stroke="${INK}" stroke-width="${SW}"/>`;
+    case "bald": return `<path d="M112 410 C118 360 140 340 150 330 L150 430Z M448 410 C442 360 420 340 410 330 L410 430Z" fill="${h}"/>`;
+    case "curly": return `<path d="M120 370 C150 250 410 250 440 370 C380 320 180 320 120 370Z" fill="${h}"/>`;
+  }
+  return "";
+}
+function face(mood){
+  const L=`stroke="${INK}" stroke-width="9" fill="none" stroke-linecap="round"`;
+  switch(mood){
+    case "happy": return `<path d="M205 410 q22 -18 44 0 M311 410 q22 -18 44 0" ${L}/><path d="M235 490 q45 50 90 0Z" fill="${INK}"/>`;
+    case "shocked": return `<circle cx="227" cy="410" r="26" fill="#fff" stroke="${INK}" stroke-width="8"/><circle cx="227" cy="410" r="9" fill="${INK}"/><circle cx="333" cy="410" r="26" fill="#fff" stroke="${INK}" stroke-width="8"/><circle cx="333" cy="410" r="9" fill="${INK}"/><path d="M195 360 l55 12 M365 360 l-55 12" ${L}/><ellipse cx="280" cy="510" rx="26" ry="34" fill="${INK}"/>`;
+    case "angry": return `<path d="M190 375 l65 25 M370 375 l-65 25" ${L}/><circle cx="230" cy="420" r="11" fill="${INK}"/><circle cx="330" cy="420" r="11" fill="${INK}"/><path d="M240 515 q40 -30 80 0" ${L}/>`;
+    case "sad": return `<path d="M200 395 l50 -14 M360 395 l-50 -14" ${L}/><path d="M205 425 q22 12 44 0 M311 425 q22 12 44 0" ${L}/><path d="M245 520 q35 -26 70 0" ${L}/><path d="M220 445 q-14 40 0 56 q14 -16 0 -56Z" fill="#6ec6ff" stroke="${INK}" stroke-width="5"/>`;
+    case "smug": return `<path d="M200 410 h48 M312 410 h48" ${L}/><path d="M200 380 l45 -10 M315 372 l45 6" ${L}/><path d="M245 495 q50 20 75 -15" ${L}/>`;
+    default: return `<path d="M205 410 q22 -14 44 0 M311 410 q22 -14 44 0" ${L}/><path d="M250 495 q30 14 60 0" ${L}/>`;
+  }
+}
+function character(role,mood,flip){
+  const c=CAST[role]||CAST.stranger;
+  const s=c.kid?0.8:1;
+  const body=c.fem
+    ? `<path d="M110 1085 C110 760 170 640 280 640 C390 640 450 760 450 1085Z" fill="${c.outfit}" stroke="${INK}" stroke-width="${SW}"/>`
+    : `<path d="M90 1085 C90 760 150 650 280 650 C410 650 470 760 470 1085Z" fill="${c.outfit}" stroke="${INK}" stroke-width="${SW}"/><path d="M230 650 L280 720 L330 650" fill="#fff" stroke="${INK}" stroke-width="8"/>`;
+  const tie=c.tie?`<path d="M268 720 L292 720 L305 900 L280 940 L255 900Z" fill="#e0313f" stroke="${INK}" stroke-width="7"/>`:"";
+  const beard=c.beard==="full"?`<path d="M150 450 C160 610 400 610 410 450 C380 560 180 560 150 450Z" fill="${c.hair}" stroke="${INK}" stroke-width="8"/>`
+    :c.beard==="mous"?`<path d="M235 468 q45 -24 90 0 q-45 10 -90 0Z" fill="${c.hair}" stroke="${INK}" stroke-width="6"/>`
+    :c.beard==="stub"?`<path d="M165 470 C185 590 375 590 395 470" fill="none" stroke="${c.hair}" stroke-width="22" opacity=".45"/>`:"";
+  const glasses=c.glasses?`<g fill="none" stroke="${INK}" stroke-width="7"><circle cx="227" cy="412" r="38"/><circle cx="333" cy="412" r="38"/><path d="M265 412 h30"/></g>`:"";
+  const wr=c.old?`<path d="M190 345 q20 -8 40 0 M330 345 q20 -8 40 0" stroke="${INK}" stroke-width="5" fill="none" opacity=".5"/>`:"";
+  return `<svg viewBox="0 0 560 1085" width="560" height="1085" style="transform:${flip?"scaleX(-1)":""} scale(${s});transform-origin:50% 100%">
+    ${hairBack(c)}
+    ${body}${tie}
+    <rect x="250" y="570" width="60" height="90" fill="${c.skin}" stroke="${INK}" stroke-width="${SW}"/>
+    <circle cx="280" cy="420" r="170" fill="${c.skin}" stroke="${INK}" stroke-width="${SW}"/>
+    <circle cx="200" cy="480" r="22" fill="#ff9aa5" opacity=".55"/><circle cx="360" cy="480" r="22" fill="#ff9aa5" opacity=".55"/>
+    ${wr}${beard}${hairFront(c)}${face(mood)}${glasses}
+  </svg>`;
+}
+
+/* ---------- settings ---------- */
+function setting(name){
+  const o=`stroke="${INK}" stroke-width="${SW}"`;
+  const wall={dining:"#ffe3b8",bedroom:"#2a2f5e",living:"#d8f0e4",kitchen:"#fff2cc",office:"#e3ecf5",boardroom:"#e8e2f4",
+    wedding:"#ffe1ec",hospital:"#dff5f2",street:"#9ed8ff",party:"#fff0d6",car:"#bfe3ff",restaurant:"#f9dcc4"}[name]||"#ffe9c7";
+  const floor={bedroom:"#3d3470",street:"#8d8d99",hospital:"#b9ded9",car:"#7a7a88"}[name]||"#f2b880";
+  let x="";
+  switch(name){
+    case "dining": case "restaurant":
+      x=`<line x1="540" y1="0" x2="540" y2="230" ${o}/><path d="M400 230 h280 l-40 90 h-200Z" fill="#ffd84a" ${o}/><circle cx="540" cy="360" r="60" fill="#fff6b0" opacity=".7"/>
+         <rect x="80" y="420" width="300" height="360" rx="14" fill="#c9e7ff" ${o}/><rect x="700" y="440" width="260" height="200" fill="#ffb3a7" ${o}/>`;break;
+    case "bedroom":
+      x=`<rect x="90" y="380" width="380" height="420" rx="16" fill="#3f4f9c" ${o}/><circle cx="300" cy="520" r="70" fill="#fff4d0"/><line x1="280" y1="380" x2="280" y2="800" ${o}/>
+         <circle cx="880" cy="470" r="70" fill="#fff" ${o}/><text x="880" y="590" text-anchor="middle" font-size="40" font-family="Fredoka" fill="#fff">2:47 AM</text>`;break;
+    case "living":
+      x=`<rect x="640" y="380" width="300" height="220" rx="10" fill="#ffd1a8" ${o}/><path d="M690 560 l70 -90 l60 60 l40 -40 l60 70Z" fill="#7cc58a"/>
+         <rect x="80" y="420" width="40" height="420" fill="#c0a080" ${o}/><path d="M40 420 h120 l-30 -110 h-60Z" fill="#ffd84a" ${o}/>`;break;
+    case "kitchen":
+      x=`<rect x="60" y="360" width="960" height="200" fill="#9ad0c2" ${o}/>${[0,1,2,3].map(i=>`<line x1="${300+i*0}" y1="0" x2="0" y2="0"/>`).join("")}
+         <line x1="300" y1="360" x2="300" y2="560" ${o}/><line x1="540" y1="360" x2="540" y2="560" ${o}/><line x1="780" y1="360" x2="780" y2="560" ${o}/>
+         <rect x="820" y="620" width="200" height="760" fill="#f4f4f4" ${o}/>`;break;
+    case "office":
+      x=`<rect x="80" y="360" width="420" height="380" fill="#bfe6ff" ${o}/>${[0,1,2,3,4].map(i=>`<line x1="80" y1="${420+i*65}" x2="500" y2="${420+i*65}" stroke="${INK}" stroke-width="5"/>`).join("")}
+         <rect x="640" y="420" width="340" height="240" rx="14" fill="#2b1d3a"/><rect x="660" y="440" width="300" height="200" fill="#7c5cff"/>`;break;
+    case "boardroom":
+      x=`<rect x="300" y="300" width="480" height="300" fill="#fff" ${o}/><path d="M340 560 l100 -120 l80 60 l120 -150 l100 80" fill="none" stroke="#33b07a" stroke-width="14"/>`;break;
+    case "wedding":
+      x=`<path d="M200 1400 V600 C200 280 880 280 880 600 V1400" fill="none" stroke="#ffffff" stroke-width="60"/><path d="M200 1400 V600 C200 280 880 280 880 600 V1400" fill="none" ${o}/>
+         ${[[230,560],[330,380],[540,320],[750,380],[850,560]].map(([a,b])=>`<circle cx="${a}" cy="${b}" r="46" fill="#ff8fb1" ${o}/>`).join("")}`;break;
+    case "hospital":
+      x=`<rect x="700" y="380" width="260" height="200" rx="14" fill="#1d3b3a" ${o}/><path d="M720 480 h60 l20 -50 l30 100 l25 -50 h85" fill="none" stroke="#5cff9d" stroke-width="8"/>
+         <path d="M140 420 h60 v-60 h60 v60 h60 v60 h-60 v60 h-60 v-60 h-60Z" fill="#ff6b6b" ${o}/>`;break;
+    case "street":
+      x=`<rect x="40" y="300" width="260" height="1100" fill="#ffcf7d" ${o}/><rect x="340" y="200" width="300" height="1200" fill="#ff9f8a" ${o}/><rect x="690" y="380" width="340" height="1020" fill="#b4a7ff" ${o}/>
+         ${[0,1,2,3].map(i=>`<rect x="${400+(i%2)*120}" y="${280+Math.floor(i/2)*170}" width="70" height="100" fill="#fff6b0" ${o}/>`).join("")}`;break;
+    case "party":
+      x=`<path d="M60 300 Q540 460 1020 300" fill="none" ${o}/>${[150,300,450,600,750,900].map((a,i)=>`<path d="M${a} ${330+(i%2)*30} l40 80 l40 -80Z" fill="${["#ff7a8a","#ffd84a","#7c5cff"][i%3]}" ${o}/>`).join("")}
+         <circle cx="160" cy="620" r="70" fill="#ff7a8a" ${o}/><circle cx="920" cy="600" r="70" fill="#7cc5ff" ${o}/>`;break;
+    case "car":
+      x=`<rect x="60" y="300" width="960" height="560" rx="60" fill="#d6f0ff" ${o}/><circle cx="540" cy="1250" r="170" fill="none" stroke="${INK}" stroke-width="30"/>`;break;
+  }
+  return `<svg class="bg" viewBox="0 0 1080 1920" width="1080" height="1920"><rect width="1080" height="1920" fill="${wall}"/><rect y="1380" width="1080" height="540" fill="${floor}"/><line x1="0" y1="1380" x2="1080" y2="1380" ${o}/>${x}</svg>`;
+}
+
+/* ---------- props ---------- */
+function esc(s){return String(s||"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]))}
+function prop(p){
+  if(!p) return "";
+  if(p.type==="phone"){
+    const ms=(p.messages||[]).slice(0,3);
+    return `<div class="phone pr"><div class="screen"><div class="ph-top">${esc(p.from||"Unknown")}</div>${ms.map((m,i)=>`<div class="bub pb${i===ms.length-1&&ms.length>1?" last":""}">${esc(m)}</div>`).join("")}</div></div>`;
+  }
+  if(p.type==="call"){
+    const n=esc(p.from||"Unknown");
+    return `<div class="phone pr"><div class="screen"><div class="call"><div class="av">${n.slice(0,1)}</div><div class="who">${n}</div><div class="sub">incoming call…</div>
+      <div class="btns"><div class="btn" style="background:#e0313f"></div><div class="btn" style="background:#33c46b"></div></div></div></div></div>`;
+  }
+  if(p.type==="document"){
+    return `<div class="doc pr"><div class="dt">${esc(p.title||"DOCUMENT")}</div><div class="ln"></div><div class="ln" style="width:80%"></div><div class="hl pb">${esc(p.line||"")}</div><div class="ln"></div><div class="ln" style="width:60%"></div>${p.stamp?`<div class="stamp pb">${esc(p.stamp)}</div>`:""}</div>`;
+  }
+  return "";
+}
+
+/* ---------- build ---------- */
+const stage=document.getElementById("stage");
+const tl=gsap.timeline({paused:true});
+const FX={shocked:"!",angry:"#!",sad:"",smug:"",happy:"♥"};
+
+PLAN.scenes.forEach((sc,i)=>{
+  const el=document.createElement("div");
+  el.className="scene"; el.id="s"+i;
+  const chars=sc.chars.slice(0, sc.prop?1:2);
+  const pos=sc.prop?["l"]:(chars.length===1?["c"]:["l","r"]);
+  el.innerHTML=`<div class="cam">${setting(sc.setting)}${chars.map((c,k)=>`<div class="ch ${pos[k]}">${character(c.role,c.mood,pos[k]==="r")}</div>`).join("")}${prop(sc.prop)}</div>
+    ${sc.label?`<div class="label">${esc(sc.label)}</div>`:""}
+    ${chars.map((c,k)=>FX[c.mood]?`<div class="fx" style="left:${pos[k]==="r"?820:pos[k]==="c"?700:360}px;top:560px">${FX[c.mood]}</div>`:"").join("")}`;
+  stage.appendChild(el);
+  const t=sc.start, d=sc.end-sc.start;
+  tl.set(el,{opacity:1},t); if(i<PLAN.scenes.length-1) tl.set(el,{opacity:0},sc.end);
+  tl.fromTo(el.querySelector(".cam"),{scale:1},{scale:1.07,duration:d,ease:"none"},t);
+  el.querySelectorAll(".ch").forEach((c,k)=>{
+    const from=c.classList.contains("r")?600:-600;
+    tl.from(c,{x:from,duration:.45,ease:"power3.out"},t+0.05+k*0.12);
+    tl.to(c,{y:-14,duration:.35,yoyo:true,repeat:Math.max(1,Math.floor(d/0.7)),ease:"sine.inOut"},t+0.6);
+  });
+  const lb=el.querySelector(".label");
+  if(lb) tl.from(lb,{y:-60,opacity:0,scale:.8,duration:.4,ease:"back.out(2)"},t+0.1);
+  const pr=el.querySelector(".pr");
+  if(pr){
+    tl.from(pr,{y:1300,rotation:12,duration:.6,ease:"back.out(1.3)"},t+0.15);
+    const pbs=el.querySelectorAll(".pb");
+    pbs.forEach((b,k)=>tl.from(b,{scale:0,transformOrigin:"0 100%",duration:.3,ease:"back.out(2)"},t+0.8+k*Math.min(1.2,(d-1)/Math.max(1,pbs.length))));
+    if(sc.prop.type==="call") tl.to(pr,{rotation:3,duration:.06,yoyo:true,repeat:Math.floor(d/0.12)},t+0.8);
+  }
+  const fx=el.querySelectorAll(".fx");
+  fx.forEach(f=>{tl.fromTo(f,{opacity:0,scale:.2},{opacity:1,scale:1,duration:.3,ease:"back.out(3)"},t+0.5);});
+  if(chars.some(c=>c.mood==="shocked"||c.mood==="angry")){
+    tl.to("#flash",{opacity:.7,duration:.05},t+0.45).to("#flash",{opacity:0,duration:.25},t+0.5);
+    tl.to(el.querySelector(".cam"),{x:16,duration:.05,yoyo:true,repeat:7},t+0.45);
+  }
+});
+
+/* captions: word groups, current word highlighted */
+const caps=document.getElementById("caps");
+PLAN.captions.forEach((g,i)=>{
+  const d=document.createElement("div"); d.className="cg";
+  d.innerHTML=g.words.map(w=>`<span class="cw">${esc(w.text)}</span>`).join("");
+  caps.appendChild(d);
+  tl.set(d,{opacity:1},g.start); tl.set(d,{opacity:0},g.end);
+  tl.fromTo(d,{scale:.75},{scale:1,duration:.15,ease:"back.out(3)"},g.start);
+  d.querySelectorAll(".cw").forEach((s,k)=>{tl.set(s,{color:"#ffd84a"},g.words[k].start); if(k<g.words.length-1) tl.set(s,{color:"#ffffff"},g.words[k+1].start);});
+});
+tl.set({}, {}, PLAN.duration);
+window.__timelines=window.__timelines||{};
+window.__timelines["main"]=tl;
+tl.seek(0);
+</script>
+</body>
+</html>
