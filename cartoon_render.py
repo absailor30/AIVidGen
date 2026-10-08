@@ -43,8 +43,7 @@ BEAT_MIN_WORDS, BEAT_MAX_WORDS = 10, 22
 CAPTION_WORDS = 3
 
 # Applied on top of the shared per-track LUFS levelling. The first posted
-# cartoon (2026-10-08) had the music too loud under the narration: this mix
-# adds edge-tts audio raw, without the voice boost the stock lane gets.
+# cartoon (2026-10-08) had the music too loud under the narration.
 BGM_SCALE = 0.9
 
 
