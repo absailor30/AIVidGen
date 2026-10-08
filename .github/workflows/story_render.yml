@@ -19,6 +19,8 @@ on:
 jobs:
   render:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # dry runs push the preview to the previews branch
     env:
       # Python block-buffers stdout when piped into tee, so on a timeout kill
       # the buffer is lost — run #197 uploaded to YouTube successfully and the
@@ -122,6 +124,19 @@ jobs:
           name: preview
           path: /tmp/preview.mp4
           if-no-files-found: warn
+
+      # Artifacts need a browser login to download; a branch can be fetched
+      # with plain git, which is how a preview gets to a phone.
+      - name: Push dry-run video to the previews branch
+        if: inputs.dry_run
+        shell: bash
+        run: |
+          [ -f /tmp/preview.mp4 ] || exit 0
+          cd "$(mktemp -d)"
+          git init -q && git checkout -q --orphan previews
+          cp /tmp/preview.mp4 "preview-${{ github.run_number }}.mp4"
+          git add . && git -c user.name=storyvault -c user.email=actions@github.com commit -qm "Preview from run ${{ github.run_number }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" previews
 
       # Send the actual error, not just a link. A bare "it failed" meant every
       # past alert required opening Actions to learn anything; the tail of the

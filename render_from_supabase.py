@@ -801,6 +801,17 @@ def main():
     if os.environ.get("DRY_RUN"):
         import shutil
         shutil.copy(video_path, "/tmp/preview.mp4")
+        # Also put it in the storage bucket with a 24h link, so the preview
+        # can be watched from a phone without downloading a run artifact.
+        try:
+            name = f"preview-{row['id']}-{int(time.time())}.mp4"
+            with open(remux_faststart(video_path), "rb") as f:
+                sb.storage.from_(STORAGE_BUCKET).upload(
+                    name, f.read(), file_options={"content-type": "video/mp4"})
+            link = sb.storage.from_(STORAGE_BUCKET).create_signed_url(name, 86400)
+            print(f"[main] Preview link (24h): {link['signedURL']}")
+        except Exception as e:
+            print(f"[main] Preview upload failed (artifact still attached): {e}")
         sb_retry(
             "release claim (dry run)",
             lambda: sb.table("story_queue").update({"claimed_at": None})

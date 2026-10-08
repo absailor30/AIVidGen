@@ -42,3 +42,4 @@ streamlit.log
 .env.local
 token.pickle
 client_secret.json
+/previews/

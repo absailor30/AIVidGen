@@ -42,6 +42,10 @@ MOODS = ["calm", "happy", "shocked", "angry", "sad", "smug"]
 BEAT_MIN_WORDS, BEAT_MAX_WORDS = 10, 22
 CAPTION_WORDS = 3
 
+# Applied on top of the shared per-track LUFS levelling. The first posted
+# cartoon (2026-10-08) had the music too loud under the narration.
+BGM_SCALE = 0.9
+
 
 # ---------- narration ----------
 
@@ -311,6 +315,7 @@ def render(story: dict, out_path: str, bgm: tuple[str, float] | None = None) -> 
     inputs = ["-i", silent, "-i", narration]
     if bgm:
         path, gain = bgm
+        gain *= BGM_SCALE
         inputs += ["-stream_loop", "-1", "-i", path]
         mix = (f"[2:a]volume={gain},afade=t=out:st={max(0, duration - 1.5)}:d=1.5[m];"
                f"[1:a][m]amix=inputs=2:duration=first:normalize=0[a]")
