@@ -1,4 +1,4 @@
-# Pipeline checkpoint — 2026-09-19
+# Pipeline checkpoint — 2026-10-11
 
 A snapshot of how Twisty! StoryVault runs, why it is set up this way, and what
 is still open. Update this in place rather than adding dated copies.
@@ -7,17 +7,39 @@ is still open. Update this in place rather than adding dated copies.
 
 | Lane | Cadence | Destinations | Scheduler |
 |---|---|---|---|
-| `short` | 4x daily | YouTube + Instagram | Cloudflare Worker, 03:00 / 07:00 / 11:15 / 15:00 UTC |
+| `short` | 3x daily | YouTube + Instagram | Cloudflare Worker: 12:45 / 15:45 / 19:45 UTC (18:15 / 21:15 / 01:15 IST) |
+| `cartoon` | 1x daily | YouTube + Instagram | Worker's 17:45 UTC (23:15 IST) slot, handed over by `.github/cartoon_slots` |
 | `long` (generate) | 1x daily | Supabase queue | GitHub cron, `0 13 * * *` |
-| `long` (render) | 1x daily | YouTube only | GitHub cron, `30 19 * * *` |
-| `illustrated` | manual | YouTube (unlisted) | none — experiment |
+| `long` (render) | 1x daily | YouTube only | Cloudflare Worker, `30 21 * * *` (03:00 IST) |
+| `trial` | paused | Instagram trial Reels | none: the account was below the follower minimum |
+| `illustrated` | manual | YouTube (unlisted) | none, experiment |
 | metrics | 1x daily | Supabase | GitHub cron, `30 2 * * *` |
 | IG token refresh | weekly | Supabase | GitHub cron, `0 1 * * 1` |
 
-The long lane's cron asks for 19:30 UTC to land near 21:30. GitHub queues
-scheduled workflows rather than firing them on time; measured over five
-consecutive nights the delay was 2h24, 2h03, 2h11, 2h05, 1h54 — mean 2h07,
-spread ±15 min. Re-measure from the run list if the posting time drifts.
+Slot times are set in the Cloudflare dashboard (the Worker's Cron Triggers),
+moved to the IST evening on 2026-10-06 from Instagram's audience insights. The
+long-form cron must stay in `LONG_CRONS` in `cloudflare_worker.js`.
+
+### The cartoon lane
+
+A Short drawn instead of filmed: each beat of the story becomes an animated
+scene (setting, cast with expressions, phone / call / document props) with
+word-synced captions, rendered by HyperFrames (headless Chrome + ffmpeg) in
+`cartoon_render.py` + `cartoon/template.html`. Groq storyboards each story;
+a keyword plan takes over when Groq is out of quota. Narration is Jenny at
+1.4x, music levelled like the stock lane and scaled by 0.9.
+
+- It draws from the regular `short` queue and records `variant = cartoon` in
+  `story_state`, so its numbers can be compared with stock footage.
+- `.github/cartoon_slots` decides which Worker slots it takes: `*T17` means the
+  17:45 UTC slot every day; a dated line (`2026-10-10T19`) takes one slot once.
+- `story_render.yml` takes `variant` and `dry_run` inputs. A dry run renders,
+  posts nothing, returns the story to the queue, attaches the video to the run,
+  and pushes it to the `previews` branch.
+- **A cloned voice was tried and rejected** (2026-10-10). Chatterbox (MIT)
+  cloned the owner's voice from a sample in the private bucket
+  (`rendered-videos/voice/`), but the result was judged far worse than Jenny.
+  `voice_clone.py` and `voice_test.yml` remain on main, unused.
 
 **Long-form generation is a separate workflow from long-form rendering**, and
 that separation is load-bearing. They shared a slot until run #14, which found
@@ -55,8 +77,14 @@ how recently a video was posted — anything older than ~5 days barely moves.
   The `IG_ACCESS_TOKEN` secret is only the seed for the first refresh and the
   way back in if the stored one ever lapses. Instagram tokens cannot be
   refreshed once expired, which is why the job runs weekly rather than monthly.
-- **The Cloudflare Worker's `30 21 * * *` trigger has never fired.** Its other
-  four crons work. The long lane runs on GitHub's cron instead.
+- **YouTube can drop an upload mid-transfer** with `410 Gone` (run #361). The
+  upload now restarts with a fresh session up to 3 times on 404/410/429/5xx;
+  nothing publishes until an upload completes, so a retry cannot double-post.
+- **Music is levelled per track** to -32 LUFS (`_pick_bgm`); "too loud" was
+  one track being much hotter than the rest, not the overall volume.
+- **Groq's free tier is 200k tokens a day** and a busy day uses nearly all of
+  it. Generation fails fast on a daily-quota 429 and the render still posts
+  from the queue; a cartoon storyboard falls back to the keyword plan.
 - **Groq 429s now wait, and say why.** The backoff honours a reported reset up
   to 120s over 6 attempts (it used to clip every wait to 30s, which could not
   ride out a per-minute token cap), and each retry logs Groq's response body.
@@ -68,8 +96,11 @@ how recently a video was posted — anything older than ~5 days barely moves.
 
 ## Open items
 
-- Delete the Worker's `30 21 * * *` cron trigger in the Cloudflare dashboard.
-  Harmless today, a double-post if it ever wakes up.
+- Compare the `cartoon` and `short` lanes in `story_metrics` after about a
+  week of daily cartoons (from 2026-10-11), and the hook/CTA experiment arms.
+- Re-enable the `trial` lane once Instagram allows trial Reels on the account.
+- Delete the `previews` branch (it held a cloned-voice sample) and, if unused,
+  the voice sample in `rendered-videos/voice/`.
 - Drop the dead `GOOGLE_CLIENT_SECRET_JSON` references from both workflows.
 - Point the image provider at a router once its API shape is known. Keep
   Pollinations as the keyless fallback, and parallelise the frame fetches —
