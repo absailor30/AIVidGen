@@ -1,0 +1,46 @@
+name: Voice clone test
+
+# Reads a short story passage in the cloned voice (voice_clone.py) and pushes
+# the result to the previews branch. Nothing is posted.
+on:
+  workflow_dispatch:
+    inputs:
+      text:
+        description: "Text to read"
+        required: false
+        default: "My mother called me at two in the morning. She whispered that my brother was going to claim my startup as his own, at our family dinner. I had built that company for six years, and nobody in that house knew."
+
+jobs:
+  speak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Chatterbox
+        run: |
+          pip install torch==2.6.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+          pip install chatterbox-tts==0.1.7 faster-whisper==1.1.0 supabase==2.31.0
+      - name: Speak
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          TEXT: ${{ inputs.text }}
+        run: |
+          start=$(date +%s)
+          python voice_clone.py "$TEXT" /tmp/clone.mp3
+          echo "Took $(( $(date +%s) - start ))s"
+      - name: Push clip to the previews branch
+        run: |
+          cd "$(mktemp -d)"
+          git init -q && git checkout -q --orphan previews
+          cp /tmp/clone.mp3 "voice-test-${{ github.run_number }}.mp3"
+          git add . && git -c user.name=storyvault -c user.email=actions@github.com commit -qm "Voice test ${{ github.run_number }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" previews
