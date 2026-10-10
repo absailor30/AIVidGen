@@ -38,7 +38,8 @@ jobs:
       - uses: actions/checkout@v4
 
       # The Worker dispatches with no inputs, so a slot handed to the cartoon
-      # lane is listed in .github/cartoon_slots as a UTC hour (2026-10-08T17).
+      # lane is listed in .github/cartoon_slots as a UTC hour: 2026-10-08T17 for
+      # one day, or *T17 for that slot every day.
       # One line per slot; anything not listed stays on stock footage.
       - name: Pick lane for this slot
         id: lane
@@ -46,7 +47,8 @@ jobs:
         run: |
           V="${{ inputs.variant }}"
           HOUR=$(date -u +%Y-%m-%dT%H)
-          if [ -z "$V" ] && grep -qx "$HOUR" .github/cartoon_slots 2>/dev/null; then
+          DAILY="*T$(date -u +%H)"
+          if [ -z "$V" ] && grep -qxF -e "$HOUR" -e "$DAILY" .github/cartoon_slots 2>/dev/null; then
             V=cartoon; echo "Slot $HOUR is listed in .github/cartoon_slots"
           fi
           echo "variant=${V:-short}" >> "$GITHUB_OUTPUT"
