@@ -125,7 +125,7 @@ const HELP = `Twisty! StoryVault controls
 /models  - list the models Groq currently serves
 /model   - show the pinned model
 /model <name> - pin a specific model
-/fix     - diagnose and self-repair a retired model
+/fix     - diagnose the last failed run (repairs a retired model itself)
 /help    - this message`;
 
 // --- actions ---------------------------------------------------------------
@@ -221,7 +221,10 @@ async function reportLogs(env) {
 
 async function listModels(env) {
   const models = await groqModels(env);
-  if (!models.length) return sendTelegram(env, "Groq returned no models.");
+  if (!models.length) {
+    const { error } = await groqModelsDetailed(env);
+    return sendTelegram(env, `Groq returned no models: ${error}`);
+  }
   const pinned = await getModel(env).catch(() => null);
   const lines = models.map((m) => (m === pinned ? `* ${m}  <- pinned` : `  ${m}`));
   await sendTelegram(env, `Groq currently serves ${models.length} models:\n\n${lines.join("\n")}`);
@@ -250,40 +253,86 @@ async function setModel(env, name) {
   await sendTelegram(env, `Pinned model: ${name}\n\nSend /render to try it now.`);
 }
 
+// Known failure signatures, matched against the tail of the last failed run's
+// log. Each says in plain words what broke and what to do; only a retired
+// model can be repaired from here, so that is the one case /fix acts on.
+const FAILURES = [
+  { re: /edge_tts stream timed out|failed to generate audio|NoAudioReceived/i,
+    msg: "Narration failed: Microsoft's free voice service (edge-tts, Jenny) did not answer. " +
+         "This happens when Microsoft changes the service; the fix is a newer edge-tts in requirements.txt. " +
+         "Check https://pypi.org/project/edge-tts/#history for a fresh release." },
+  { re: /no queued \w+ stories|queue is empty/i,
+    msg: "The story queue is empty and nothing could be generated, so the slot had nothing to post. " +
+         "Usually Groq quota or a Groq error just above in the log." },
+  { re: /HttpError 410|returned "Gone"/i,
+    msg: "YouTube dropped the upload session (410 Gone). Temporary; the upload retries with a fresh session, " +
+         "so the next slot normally posts." },
+  { re: /HttpError 403|quotaExceeded|uploadLimitExceeded/i,
+    msg: "YouTube refused the upload (quota or upload limit). It resets daily; check YouTube Studio if it repeats." },
+  { re: /invalid_grant|Token has been expired or revoked/i,
+    msg: "The YouTube login expired. Re-authorise and update the GOOGLE_TOKEN_PICKLE_B64 secret." },
+  { re: /Instagram.*(OAuth|token|190)/i,
+    msg: "Instagram rejected the access token. Run the IG token refresh workflow, or re-seed IG_ACCESS_TOKEN." },
+  { re: /model.*(not found|does not exist|decommissioned)|model_not_found/i, model: true,
+    msg: "The Groq model was retired." },
+  // Last: generation notes this in logs whose real failure came later.
+  { re: /tokens per day|TPD/i,
+    msg: "Groq's free daily token quota is used up. It recovers by itself within 24h; " +
+         "queued stories still post. Nothing to fix unless the queue is empty." },
+];
+
 async function autoFix(env) {
-  await sendTelegram(env, "Checking...");
+  await sendTelegram(env, "Checking the last failed run...");
 
-  const [queue, models, pinned] = await Promise.all([
-    queueDepth(env),
-    groqModels(env),
-    getModel(env).catch(() => null),
-  ]);
+  const resp = await gh(env, `/actions/workflows/${WORKFLOW}/runs?per_page=10`);
+  const runs = resp.ok ? (await resp.json()).workflow_runs || [] : [];
+  const failed = runs.find((r) => r.conclusion === "failure");
+  if (!failed) return sendTelegram(env, "None of the last 10 runs failed. Nothing to fix.");
 
+  const jobs = (await (await gh(env, `/actions/runs/${failed.id}/jobs`)).json()).jobs || [];
+  const logResp = jobs.length ? await gh(env, `/actions/jobs/${jobs[0].id}/logs`) : null;
+  const log = logResp && logResp.ok ? (await logResp.text()).slice(-20000) : "";
+  const steps = jobs[0]?.steps?.filter((s) => s.conclusion === "failure").map((s) => s.name) || [];
+  const head = `Run #${failed.run_number} (${failed.created_at}) failed` +
+    (steps.length ? ` at: ${steps.join(", ")}` : "") + ".";
+  const later = runs.find((r) => r.conclusion === "success" && Date.parse(r.created_at) > Date.parse(failed.created_at));
+  const since = later ? `\n\nNote: run #${later.run_number} after it succeeded, so this may already be fixed.` : "";
+
+  const hit = FAILURES.find((f) => f.re.test(log));
+  if (!hit) {
+    const line = (log.match(/.*(Error|FATAL|failed).*$/gim) || []).slice(-3).join("\n").slice(0, 900);
+    return sendTelegram(env, `${head}\n\nNot a failure I recognise. Last error lines:\n${line || "(log unreadable)"}${since}\n\nSend /logs for the full tail.`);
+  }
+  if (!hit.model) return sendTelegram(env, `${head}\n\n${hit.msg}${since}`);
+
+  // Retired model: the one case repairable from here.
+  const { models, error } = await groqModelsDetailed(env);
   if (!models.length) {
-    return sendTelegram(
-      env,
-      "Groq returned no models — that points at the API key or an outage, not the model name. Check GROQ_API_KEY."
-    );
+    return sendTelegram(env, `${head}\n\n${hit.msg} But Groq would not list its models: ${error}`);
   }
-
-  // The pinned model still exists, so a retired model is not the problem.
-  if (pinned && models.includes(pinned)) {
-    return sendTelegram(
-      env,
-      `Model "${pinned}" is still served by Groq, so this is not a retired-model problem.\n` +
-        `Queue: ${queue} unclaimed. Check /logs for the real error.`
-    );
-  }
-
+  const pinned = await getModel(env).catch(() => null);
   const pick = MODEL_PREFERENCE.find((m) => models.includes(m)) || models[0];
   await putModel(env, pick);
-  await sendTelegram(
-    env,
-    (pinned
-      ? `Pinned model "${pinned}" is no longer served by Groq.`
-      : "No model was pinned.") + `\n\nRepointed to: ${pick}\nTriggering a render to confirm...`
-  );
+  await sendTelegram(env, `${head}\n\n${hit.msg} ` +
+    (pinned ? `"${pinned}" -> ` : "") + `repointed to ${pick}. Triggering a render to confirm...`);
   await triggerRender(env, { announce: true });
+}
+
+// groqModels() with the reason when it comes back empty, so a bad key, a rate
+// limit and an outage are told apart instead of all reading "no models".
+async function groqModelsDetailed(env) {
+  if (!env.GROQ_API_KEY) return { models: [], error: "GROQ_API_KEY is not set on the Worker." };
+  try {
+    const r = await fetch("https://api.groq.com/openai/v1/models", {
+      headers: { Authorization: `Bearer ${env.GROQ_API_KEY}` },
+    });
+    if (!r.ok) return { models: [], error: `HTTP ${r.status}: ${(await r.text()).slice(0, 200)}` };
+    const ids = ((await r.json()).data || []).map((m) => m.id)
+      .filter((id) => !/whisper|tts|guard|embed/i.test(id)).sort();
+    return { models: ids, error: ids.length ? null : "Groq answered with an empty list." };
+  } catch (e) {
+    return { models: [], error: `network error: ${e.message}` };
+  }
 }
 
 // --- helpers ---------------------------------------------------------------
