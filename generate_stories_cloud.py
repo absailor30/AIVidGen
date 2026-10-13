@@ -729,6 +729,19 @@ def main():
         sys.exit(f"[generate] Unknown STORY_VARIANT {variant!r}; "
                  f"expected one of {sorted(QUEUE_TARGETS)}")
     target = QUEUE_TARGETS[variant]
+    # Backlog mode: .github/pause_generation holds a UTC date (YYYY-MM-DD).
+    # Through that day, only refill a queue that is completely empty, so
+    # stories already waiting (e.g. after an outage) post before new ones are
+    # written. Never pauses outright: an empty queue still gets a story.
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               ".github", "pause_generation")) as f:
+            until = f.read().strip()
+        if until and datetime.now(timezone.utc).strftime("%Y-%m-%d") <= until:
+            print(f"[generate] Backlog mode until {until}: refilling only an empty queue.")
+            target = 1
+    except FileNotFoundError:
+        pass
     unclaimed = (
         sb.table("story_queue").select("id", count="exact")
         .is_("claimed_at", "null").eq("variant", variant).execute().count
