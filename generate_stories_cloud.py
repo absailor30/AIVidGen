@@ -441,6 +441,27 @@ def _is_quota_exhausted(resp) -> bool:
     return ("per day" in body) or ("request too large" in body)
 
 
+# A Short's JSON reply runs ~1200 tokens; below this a story would be cut off.
+MIN_REPLY_TOKENS = 1500
+
+
+def _fit_reply_budget(resp, max_tok: int) -> int | None:
+    """A smaller max_tokens that fits a 'Request too large' 429, or None.
+
+    The body reads "... (TPM): Limit 8000, Requested 8881 ...". Only the reply
+    budget can shrink from here, so the overshoot comes out of it, plus a
+    margin; if that leaves too little room for a story, give up on the model.
+    """
+    if resp.status_code != 429 or "request too large" not in (resp.text or "").lower():
+        return None
+    m = re.search(r"Limit (\d+), Requested (\d+)", resp.text or "")
+    if not m:
+        return None
+    limit, requested = int(m.group(1)), int(m.group(2))
+    fit = max_tok - (requested - limit) - 200
+    return fit if MIN_REPLY_TOKENS <= fit < max_tok else None
+
+
 def call_groq(system: str, user: str) -> dict:
     global _active_model
 
@@ -451,6 +472,12 @@ def call_groq(system: str, user: str) -> dict:
     resp = None
     quota_hit = []
     for model in candidates:
+        # Groq counts a request as prompt + max_tokens against the per-minute
+        # cap, so a request can be rejected as "too large" before it is even
+        # run (2026-10-13: 4.9k prompt + 4000 reply = 8881 > 8000 TPM). Shrink
+        # the reply budget to fit and retry, unless what is left is too small
+        # for a story, in which case the next model is the only option.
+        max_tok = MAX_TOKENS
         # Retry on 429 (rate limit), honoring the reset window the API reports.
         for attempt in range(GROQ_429_ATTEMPTS):
             resp = requests.post(
@@ -460,7 +487,7 @@ def call_groq(system: str, user: str) -> dict:
                     "model": model,
                     "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
                     "temperature": 0.9,
-                    "max_tokens": MAX_TOKENS,
+                    "max_tokens": max_tok,
                     # gpt-oss models think before answering, and the hidden
                     # reasoning is billed against the same daily quota. Low
                     # effort is plenty for a story and leaves room for the JSON.
@@ -468,6 +495,12 @@ def call_groq(system: str, user: str) -> dict:
                 },
                 timeout=60,
             )
+            fit = _fit_reply_budget(resp, max_tok)
+            if fit:
+                print(f"[generate] {model}: request too large for its per-minute cap; "
+                      f"retrying with max_tokens {max_tok} -> {fit}.")
+                max_tok = fit
+                continue
             if _is_quota_exhausted(resp):
                 print(f"[generate] {model} is out of quota, not waiting: "
                       f"{(resp.text or '').strip()[:200]}")
