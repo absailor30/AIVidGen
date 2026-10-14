@@ -40,6 +40,16 @@ GROQ_MODELS = [m for m in [
 ] if m]
 _active_model = None
 
+# Groq usage this run, from each response's "usage" block, so the logs show
+# what actually spends the 200k/day free quota instead of estimates.
+_usage = {"calls": 0, "prompt": 0, "completion": 0}
+
+# How many past stories in the theme each prompt carries (to avoid repeats),
+# and which fields. 25 full rows, curve included, was ~2-3k tokens of every
+# Short's prompt; hook + fingerprint are what the no-repeat rule checks.
+RECENT_FOR_PROMPT = 8
+RECENT_FIELDS = ("hook", "fingerprint")
+
 # A 260-360 word story plus its JSON envelope (dna, curve, keywords, YouTube
 # title/description/tags) runs ~1200 tokens. The old 1500 left no margin, so a
 # slightly long response was cut mid-string and failed to parse. Override with
@@ -451,6 +461,10 @@ def call_groq(system: str, user: str) -> dict:
                     "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
                     "temperature": 0.9,
                     "max_tokens": MAX_TOKENS,
+                    # gpt-oss models think before answering, and the hidden
+                    # reasoning is billed against the same daily quota. Low
+                    # effort is plenty for a story and leaves room for the JSON.
+                    **({"reasoning_effort": "low"} if model.startswith("openai/gpt-oss") else {}),
                 },
                 timeout=60,
             )
@@ -494,7 +508,14 @@ def call_groq(system: str, user: str) -> dict:
             f"Check https://console.groq.com/docs/models and set the GROQ_MODEL secret."
         )
 
-    choice = resp.json()["choices"][0]
+    body = resp.json()
+    u = body.get("usage") or {}
+    _usage["calls"] += 1
+    _usage["prompt"] += u.get("prompt_tokens") or 0
+    _usage["completion"] += u.get("completion_tokens") or 0
+    print(f"[groq] {_active_model}: {u.get('prompt_tokens')} in + {u.get('completion_tokens')} out "
+          f"tokens (run total {_usage['prompt'] + _usage['completion']} over {_usage['calls']} calls)")
+    choice = body["choices"][0]
     text = choice["message"].get("content") or ""
 
     # Say plainly when the model ran out of room, rather than surfacing it as a
@@ -783,7 +804,8 @@ def main():
         theme = pick_theme(state_rows, variant=variant, queued=queued_themes)
         cta_style = pick_cta_style(state_rows, variant=variant)
         arm = pick_experiment_arm(assigned_arms)
-        recent = [r for r in state_rows if r.get("theme") == theme][-25:]
+        recent = [{k: r.get(k) for k in RECENT_FIELDS}
+                  for r in state_rows if r.get("theme") == theme][-RECENT_FOR_PROMPT:]
         opening = (
             SUBMISSION_INSTRUCTION.format(themes=", ".join(THEMES), summary=sub["summary"])
             if sub else f"Theme lock for this spin-off: \"{theme}\"."
@@ -793,7 +815,7 @@ def main():
             f"CTA INSTRUCTION (cta_style token: {cta_style})\n"
             f"{CTA_STYLES[cta_style]}\n\n"
             + (f"{TIGHT_INSTRUCTION}\n\n" if arm == "tight" else "") +
-            f"Recent entries in this theme batch (avoid repeating fingerprints/hooks/curves):\n"
+            f"Recent entries in this theme batch (avoid repeating their hooks and fingerprints):\n"
             f"{json.dumps(recent, ensure_ascii=False)}\n\n"
             f"Generate one new story now."
         )
