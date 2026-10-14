@@ -16,6 +16,8 @@ html,body{width:1080px;height:1920px;overflow:hidden;background:#ffe9c7}
 .bg{position:absolute;left:0;top:0}
 .ch{position:absolute;top:640px;width:560px;height:1085px}
 .ch.l{left:20px}.ch.r{left:500px}.ch.c{left:260px}
+.label.hook{top:170px;font-size:100px;color:#2b1d3a;-webkit-text-stroke:0;background:#ffd84a;border:8px solid #2b1d3a;
+  border-radius:28px;padding:18px 26px;left:70px;right:70px;transform:rotate(-3deg);box-shadow:10px 10px 0 #e0313f}
 .label{position:absolute;left:50px;right:50px;top:150px;text-align:center;font-size:76px;font-weight:700;color:#fff;
   -webkit-text-stroke:6px #2b1d3a;paint-order:stroke fill;line-height:1.08}
 .phone{position:absolute;left:540px;top:620px;width:480px;height:860px;background:#2b1d3a;border-radius:56px;padding:22px}
@@ -205,27 +207,49 @@ PLAN.scenes.forEach((sc,i)=>{
     ${chars.map((c,k)=>FX[c.mood]?`<div class="fx" style="left:${pos[k]==="r"?820:pos[k]==="c"?700:360}px;top:560px">${FX[c.mood]}</div>`:"").join("")}`;
   stage.appendChild(el);
   const t=sc.start, d=sc.end-sc.start;
+  const cam=el.querySelector(".cam");
+  // Scene 0 is the hook: viewers decide to stay or swipe in the first ~2s,
+  // so it opens mid-action. Everything is on screen from frame 0, the camera
+  // slams in, the screen flashes and shakes, and the label is a big badge.
+  const hook=i===0;
   tl.set(el,{opacity:1},t); if(i<PLAN.scenes.length-1) tl.set(el,{opacity:0},sc.end);
-  tl.fromTo(el.querySelector(".cam"),{scale:1},{scale:1.07,duration:d,ease:"none"},t);
+  if(hook){
+    tl.fromTo(cam,{scale:1.35},{scale:1.08,duration:.35,ease:"power4.out"},t);
+    tl.to(cam,{scale:1.14,duration:Math.max(.1,d-.35),ease:"none"},t+.35);
+    tl.fromTo("#flash",{opacity:.9},{opacity:0,duration:.3},t);
+    tl.to(cam,{x:18,duration:.04,yoyo:true,repeat:9},t);
+  } else {
+    // A small punch on every cut keeps the drawing from feeling static.
+    tl.fromTo(cam,{scale:1.08},{scale:1.0,duration:.25,ease:"power2.out"},t);
+    tl.to(cam,{scale:1.07,duration:Math.max(.1,d-.25),ease:"none"},t+.25);
+  }
   el.querySelectorAll(".ch").forEach((c,k)=>{
-    const from=c.classList.contains("r")?600:-600;
-    tl.from(c,{x:from,duration:.45,ease:"power3.out"},t+0.05+k*0.12);
-    tl.to(c,{y:-14,duration:.35,yoyo:true,repeat:Math.max(1,Math.floor(d/0.7)),ease:"sine.inOut"},t+0.6);
+    if(!hook){
+      const from=c.classList.contains("r")?600:-600;
+      tl.from(c,{x:from,duration:.3,ease:"power3.out"},t+k*0.08);
+    }
+    tl.to(c,{y:-14,duration:.35,yoyo:true,repeat:Math.max(1,Math.floor(d/0.7)),ease:"sine.inOut"},t+(hook?.3:.45));
   });
   const lb=el.querySelector(".label");
-  if(lb) tl.from(lb,{y:-60,opacity:0,scale:.8,duration:.4,ease:"back.out(2)"},t+0.1);
+  if(lb){
+    if(hook){ lb.classList.add("hook"); tl.fromTo(lb,{scale:1.6,rotation:-12},{scale:1,rotation:-3,duration:.25,ease:"back.out(3)"},t); }
+    else tl.from(lb,{y:-60,opacity:0,scale:.8,duration:.3,ease:"back.out(2)"},t+0.05);
+  }
   const pr=el.querySelector(".pr");
   if(pr){
-    tl.from(pr,{y:1300,rotation:12,duration:.6,ease:"back.out(1.3)"},t+0.15);
+    const p0=hook?0:0.1;
+    if(hook) tl.fromTo(pr,{scale:1.3,rotation:-8},{scale:1,rotation:3,duration:.3,ease:"back.out(2)"},t);
+    else tl.from(pr,{y:1300,rotation:12,duration:.5,ease:"back.out(1.3)"},t+p0);
     const pbs=el.querySelectorAll(".pb");
-    pbs.forEach((b,k)=>tl.from(b,{scale:0,transformOrigin:"0 100%",duration:.3,ease:"back.out(2)"},t+0.8+k*Math.min(1.2,(d-1)/Math.max(1,pbs.length))));
-    if(sc.prop.type==="call") tl.to(pr,{rotation:3,duration:.06,yoyo:true,repeat:Math.floor(d/0.12)},t+0.8);
+    const b0=hook?0.25:0.7;
+    pbs.forEach((b,k)=>tl.from(b,{scale:0,transformOrigin:"0 100%",duration:.25,ease:"back.out(2)"},t+b0+k*Math.min(1.0,(d-1)/Math.max(1,pbs.length))));
+    if(sc.prop.type==="call") tl.to(pr,{rotation:3,duration:.06,yoyo:true,repeat:Math.floor(d/0.12)},t+b0);
   }
   const fx=el.querySelectorAll(".fx");
-  fx.forEach(f=>{tl.fromTo(f,{opacity:0,scale:.2},{opacity:1,scale:1,duration:.3,ease:"back.out(3)"},t+0.5);});
-  if(chars.some(c=>c.mood==="shocked"||c.mood==="angry")){
-    tl.to("#flash",{opacity:.7,duration:.05},t+0.45).to("#flash",{opacity:0,duration:.25},t+0.5);
-    tl.to(el.querySelector(".cam"),{x:16,duration:.05,yoyo:true,repeat:7},t+0.45);
+  fx.forEach(f=>{tl.fromTo(f,{opacity:0,scale:.2},{opacity:1,scale:1,duration:.3,ease:"back.out(3)"},t+(hook?.1:.4));});
+  if(!hook&&chars.some(c=>c.mood==="shocked"||c.mood==="angry")){
+    tl.to("#flash",{opacity:.7,duration:.05},t+0.35).to("#flash",{opacity:0,duration:.25},t+0.4);
+    tl.to(cam,{x:16,duration:.05,yoyo:true,repeat:7},t+0.35);
   }
 });
 

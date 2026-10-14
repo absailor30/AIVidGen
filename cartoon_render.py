@@ -120,6 +120,9 @@ Rules:
   {{"type":"document","title":"<=3 words","line":"<=8 words","stamp":"<=2 words or empty>"}} for letters, wills, contracts, receipts.
   With a prop, list only 1 character. Use props on 2-4 beats, where they make the moment visual.
 - label: a punchy on-screen caption for the beat, max 5 words (e.g. "2 AM. Mom calls.", "He took the credit").
+- Beat 1 is the HOOK, shown in the first 2 seconds, when viewers decide to stay or swipe: give it the most
+  dramatic mood that fits (shocked or angry), a prop if the beat mentions one, and a provocative label (max 5
+  words) that makes the viewer need the rest, e.g. "She sold my house", "He married my sister?".
 - Vary settings and moods so consecutive scenes look different. Never invent events not in the beat."""
 
 
@@ -176,7 +179,7 @@ def plan_heuristic(beats: list[str]) -> list[dict]:
         if other and not prop:
             chars.append({"role": other, "mood": "smug" if mood in ("sad", "shocked") else "calm"})
         scenes.append({"beat": i + 1, "setting": setting, "chars": chars, "prop": prop,
-                       "label": " ".join(b.split()[:4]) if i == 0 else ""})
+                       "label": ""})
     return scenes
 
 
@@ -301,7 +304,14 @@ def render(story: dict, out_path: str, bgm: tuple[str, float] | None = None) -> 
     print(f"[cartoon] Narration {voice_len:.1f}s, {len(words)} timed words")
 
     beats = split_beats(text)
-    scenes = time_scenes(make_plan(beats), beats, words, duration)
+    planned = make_plan(beats)
+    # The hook scene must never open calm or unlabelled (see the template).
+    hook = planned[0]
+    if all(c["mood"] == "calm" for c in hook["chars"]):
+        hook["chars"][0]["mood"] = "shocked"
+    if not hook.get("label"):
+        hook["label"] = _clip(story.get("title"), 5)
+    scenes = time_scenes(planned, beats, words, duration)
     plan = {"duration": duration, "scenes": scenes, "captions": caption_groups(words, duration)}
     with open(os.path.join(work, "plan.json"), "w") as f:
         json.dump(plan, f, indent=1)
