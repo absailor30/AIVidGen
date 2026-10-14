@@ -40,6 +40,8 @@ from generate_stories_cloud import (
     QUEUE_TARGETS,
     THEMES,
     GroqQuotaExhausted,
+    RECENT_FIELDS,
+    RECENT_FOR_PROMPT,
     call_groq,
     pick_theme,
     validate_story,
@@ -57,7 +59,11 @@ TARGET_DURATION_SECONDS = 600
 # This is affordable now only because generation moved to its own scheduled
 # job (story_generate_long.yml) hours ahead of the render. Do not raise it
 # back inside a render workflow.
-STORIES_PER_RUN = 2
+# 1, not 2 (2026-10-14). A long story is ~17 Groq calls; the second one each
+# day burned the rest of the shared 200k/day free quota and usually failed
+# anyway (one long story a day reached the queue Oct 8-11), starving the
+# Shorts. The queue keeps a buffer of 3, so one a day keeps it full.
+STORIES_PER_RUN = 1
 MAX_BEAT_ATTEMPTS = 4       # per beat, with corrective feedback between tries
 # Three whole-story restarts, not two. A restart costs 17 Groq calls, but the
 # alternative when all of them fail is a day with no long video at all.
@@ -182,7 +188,7 @@ def _plan_prompt(theme: str, recent: list) -> tuple[str, str]:
     system = f"{LONG_BRIEF}\n\n{STRUCTURE}\n\n{PLAN_SCHEMA}"
     user = (
         f'Theme lock for this story: "{theme}".\n\n'
-        f"Recent entries in this theme (avoid repeating fingerprints/hooks/curves):\n"
+        f"Recent entries in this theme (avoid repeating their hooks and fingerprints):\n"
         f"{json.dumps(recent, ensure_ascii=False)}\n\n"
         f"Plan one new long-form story now. Plan only — do not write the prose yet."
     )
@@ -340,7 +346,8 @@ def main():
         recent = [
             r for r in state_rows
             if r.get("theme") == theme and (r.get("variant") or "short") == VARIANT
-        ][-15:]
+        ][-RECENT_FOR_PROMPT:]
+        recent = [{k: r.get(k) for k in RECENT_FIELDS} for r in recent]
 
         for attempt in range(MAX_STORY_ATTEMPTS):
             try:
