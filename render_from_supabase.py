@@ -439,7 +439,7 @@ def _youtube_credentials():
 YOUTUBE_UPLOAD_ATTEMPTS = 3
 
 
-def upload_to_youtube(video_path: str, kit: dict) -> str | None:
+def upload_to_youtube(video_path: str, kit: dict, thumbnail_title: str | None = None) -> str | None:
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaFileUpload
 
@@ -492,6 +492,18 @@ def upload_to_youtube(video_path: str, kit: dict) -> str | None:
                   f"retrying with a fresh upload in {wait}s.")
             time.sleep(wait)
     video_id = response.get("id")
+
+    if thumbnail_title and video_id:
+        # Best effort: the video is already uploaded, and thumbnails.set is
+        # refused on a channel that is not phone-verified.
+        try:
+            import tempfile
+            from thumbnail import make_thumbnail, set_thumbnail
+            thumb = make_thumbnail(thumbnail_title, os.path.join(tempfile.mkdtemp(), "thumb.jpg"))
+            set_thumbnail(youtube, video_id, thumb)
+            print("[render] Custom thumbnail set.")
+        except Exception as e:
+            print(f"[render] Thumbnail not set (video still uploaded): {e}")
 
     playlist_id = os.environ.get("YOUTUBE_PLAYLIST_ID")
     if playlist_id and video_id:
@@ -826,7 +838,8 @@ def main():
         print(f"[main] Skipping YouTube -- {variant} is Instagram-only.")
     else:
         try:
-            youtube_id = upload_to_youtube(video_path, story["publishing_kit"])
+            youtube_id = upload_to_youtube(video_path, story["publishing_kit"],
+                                           story["title"] if variant == "long" else None)
             print(f"[main] Uploaded: https://youtube.com/watch?v={youtube_id}")
         except Exception as e:
             print(f"[main] YouTube upload failed: {e}")
