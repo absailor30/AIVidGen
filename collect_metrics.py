@@ -219,6 +219,15 @@ BREAKDOWN_DAYS = 28
 CONTENT_TYPES = ["SHORTS", "VIDEO_ON_DEMAND"]
 
 
+def _why(e) -> str:
+    """Google's own reason for a rejected report, not just the URL."""
+    import json
+    try:
+        return json.loads(e.content.decode())["error"]["message"][:220]
+    except Exception:
+        return str(e)[:220]
+
+
 def _channel_report(analytics, label, start, end, dimensions, metrics, filters=None,
                     sort=None, max_results=None):
     kw = dict(ids="channel==MINE", startDate=start, endDate=end,
@@ -257,7 +266,7 @@ def collect_channel_breakdown(sb, creds) -> int:
         try:
             fn()
         except Exception as e:
-            print(f"[metrics] Breakdown '{label}' skipped: {str(e)[:200]}")
+            print(f"[metrics] Breakdown '{label}' skipped: {_why(e)}")
 
     # Daily totals per content type: the subscribers-per-1,000-views trend.
     def daily():
@@ -268,29 +277,37 @@ def collect_channel_breakdown(sb, creds) -> int:
     attempt("daily by content type", daily)
 
     # Where views come from, and which source actually produces subscribers.
-    for ct in CONTENT_TYPES:
-        def traffic(ct=ct):
-            try:
-                recs = _channel_report(
-                    analytics, f"traffic {ct}", start, end, "insightTrafficSourceType",
-                    "views,estimatedMinutesWatched,subscribersGained",
-                    filters=f"creatorContentType=={ct}", sort="-views")
-            except Exception:
-                recs = _channel_report(
-                    analytics, f"traffic {ct} (views only)", start, end,
-                    "insightTrafficSourceType", "views,estimatedMinutesWatched",
-                    filters=f"creatorContentType=={ct}", sort="-views")
+    # creatorContentType is requested as a dimension here: used as a filter
+    # (the first attempt, 2026-10-23) Google answered 400 for both reports.
+    def traffic():
+        try:
+            recs = _channel_report(
+                analytics, "traffic", start, end, "creatorContentType,insightTrafficSourceType",
+                "views,estimatedMinutesWatched", sort="-views")
             for r in recs:
-                add("traffic", ct, r["insightTrafficSourceType"], r)
-        attempt(f"traffic sources {ct}", traffic)
+                add("traffic", r["creatorContentType"], r["insightTrafficSourceType"], r)
+        except Exception as e:
+            print(f"[metrics] Traffic by content type rejected ({_why(e)}); trying all content.")
+            for r in _channel_report(analytics, "traffic (all)", start, end,
+                                     "insightTrafficSourceType", "views,estimatedMinutesWatched",
+                                     sort="-views"):
+                add("traffic", "ALL", r["insightTrafficSourceType"], r)
+    attempt("traffic sources", traffic)
 
-        # Subscribers versus non-subscribers among viewers.
-        def subscribed(ct=ct):
-            for r in _channel_report(analytics, f"subscribed {ct}", start, end,
-                                     "subscribedStatus", "views,estimatedMinutesWatched",
-                                     filters=f"creatorContentType=={ct}"):
-                add("subscribed", ct, r["subscribedStatus"], r)
-        attempt(f"subscribed status {ct}", subscribed)
+    # Subscribers versus non-subscribers among viewers.
+    def subscribed():
+        try:
+            recs = _channel_report(
+                analytics, "subscribed", start, end, "creatorContentType,subscribedStatus",
+                "views,estimatedMinutesWatched")
+            for r in recs:
+                add("subscribed", r["creatorContentType"], r["subscribedStatus"], r)
+        except Exception as e:
+            print(f"[metrics] Subscribed by content type rejected ({_why(e)}); trying all content.")
+            for r in _channel_report(analytics, "subscribed (all)", start, end,
+                                     "subscribedStatus", "views,estimatedMinutesWatched"):
+                add("subscribed", "ALL", r["subscribedStatus"], r)
+    attempt("subscribed status", subscribed)
 
     # Audience countries (all content): is this really a US audience?
     def country():
