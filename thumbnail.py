@@ -1,38 +1,63 @@
 """Build a 1280x720 YouTube thumbnail for a long-form story and set it.
 
-    python thumbnail.py "The Night the Photo Album Fell Apart" out.jpg
+    python thumbnail.py video.mp4 out.jpg "THE TEXT"
 
-A character cut-out from characters/ is used when one exists (see its README);
-otherwise a simple cartoon face is drawn, so this works before any art is made.
-thumbnails.set needs a phone-verified channel; images must be under 2 MB.
+The picture is one scene from the video itself (the sharpest, best-lit of a
+dozen sampled frames), darkened at the bottom with a short line of text over
+it. The text comes from the story (see story_text). thumbnails.set needs a
+phone-verified channel; images must be under 2 MB.
 """
 
-import glob
-import hashlib
 import io
 import os
-import random
 import re
+import subprocess
 import sys
+import tempfile
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageStat
 
 W, H = 1280, 720
 FONT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cartoon", "fredoka-700.ttf")
-CHAR_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "characters")
-PALETTES = [((255, 94, 98), (60, 20, 90)), ((255, 190, 11), (120, 20, 40)),
-            ((0, 180, 216), (20, 20, 70)), ((255, 75, 145), (40, 15, 80))]
-MOODS = {"shocked": r"stole|fraud|secret|exposed|caught|forged|fake|hidden|discover",
-         "angry": r"betray|lie|revenge|cheat|sabotage|ruin",
-         "sad": r"lost|fell|apart|alone|gone|cry|funeral|died",
-         "smug": r"won|turn|comeback|glow|justice|payoff"}
+SAMPLES = 12
 STOP = {"the", "a", "an", "of", "that", "how", "my", "his", "her", "their", "our", "when", "i",
-        "to", "and", "in", "on", "for", "was", "were", "by", "with", "friend's"}
+        "to", "and", "in", "on", "for", "was", "were", "by", "with"}
+
+
+def _duration(video: str) -> float:
+    """Length in seconds, read from ffmpeg's banner so ffprobe is not needed."""
+    err = subprocess.run(["ffmpeg", "-i", video], capture_output=True, text=True).stderr
+    h, m, sec = re.search(r"Duration: (\d+):(\d+):([\d.]+)", err).groups()
+    return int(h) * 3600 + int(m) * 60 + float(sec)
+
+
+def best_frame(video: str) -> Image.Image:
+    """Sample frames between 8% and 60% of the video (past the intro, before
+    the payoff) and keep the one with the most detail and a usable brightness."""
+    dur = _duration(video)
+    best, best_score = None, -1.0
+    with tempfile.TemporaryDirectory() as tmp:
+        for i in range(SAMPLES):
+            t = dur * (0.08 + 0.52 * i / (SAMPLES - 1))
+            path = os.path.join(tmp, f"f{i}.jpg")
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-ss", f"{t:.2f}", "-i", video,
+                            "-frames:v", "1", "-q:v", "2", path], check=True)
+            if not os.path.exists(path):
+                continue
+            img = Image.open(path).convert("RGB")
+            small = img.resize((320, 180)).convert("L")
+            detail = ImageStat.Stat(small.filter(ImageFilter.FIND_EDGES)).mean[0]
+            light = ImageStat.Stat(small).mean[0]
+            score = detail - abs(light - 110) * 0.15
+            if score > best_score:
+                best, best_score = img.copy(), score
+    if best is None:
+        raise RuntimeError("no frame could be extracted")
+    return best
 
 
 def hook_text(title: str, limit: int = 4) -> str:
-    """Short, loud version of the title: filler words dropped, then the first
-    `limit` words that remain (so it never ends on a dangling 'MY')."""
+    """Fallback text: the title's first few content words."""
     words = re.findall(r"[\w'’-]+", title)
     keep = [w for w in words if w.lower() not in STOP]
     if len(keep) < 3:
@@ -40,54 +65,34 @@ def hook_text(title: str, limit: int = 4) -> str:
     return " ".join(keep[:limit]).upper()
 
 
-def mood_for(title: str) -> str:
-    for mood, pat in MOODS.items():
-        if re.search(pat, title, re.I):
-            return mood
-    return "shocked"
-
-
-def _character(mood: str, rng: random.Random):
-    files = glob.glob(os.path.join(CHAR_DIR, "*.png"))
-    if not files:
-        return None
-    match = [f for f in files if f.endswith(f"_{mood}.png")] or \
-            [f for f in files if "_" not in os.path.basename(f)] or files
-    return Image.open(rng.choice(sorted(match))).convert("RGBA")
-
-
-def _draw_face(size: int, mood: str) -> Image.Image:
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
-    c = size // 2
-    d.ellipse([8, 8, size - 8, size - 8], fill=(255, 214, 170), outline=(40, 20, 20), width=10)
-    ey, ex = int(size * .42), int(size * .2)
-    for sx in (-1, 1):
-        x = c + sx * ex
-        r = int(size * (.1 if mood == "shocked" else .07))
-        d.ellipse([x - r, ey - r, x + r, ey + r], fill="white", outline=(40, 20, 20), width=6)
-        d.ellipse([x - r // 3, ey - r // 3, x + r // 3, ey + r // 3], fill=(40, 20, 20))
-        tilt = {"angry": sx * -1, "sad": sx, "smug": 0, "shocked": 0}[mood] * 28
-        d.line([x - 45, ey - r - 25 + (tilt if sx < 0 else -tilt) * .0 - tilt,
-                x + 45, ey - r - 25 + tilt], fill=(40, 20, 20), width=14)
-    my = int(size * .72)
-    if mood == "shocked":
-        d.ellipse([c - 45, my - 55, c + 45, my + 55], fill=(90, 20, 30), outline=(40, 20, 20), width=8)
-    elif mood == "sad":
-        d.arc([c - 70, my - 20, c + 70, my + 70], 200, 340, fill=(40, 20, 20), width=12)
-    else:
-        d.arc([c - 80, my - 60, c + 80, my + 40], 20, 160, fill=(40, 20, 20), width=12)
-    return img
+def story_text(story: dict) -> str:
+    """3-5 words of curiosity-gap text drawn from the story itself, written by
+    Groq; falls back to the title's key words if Groq is unavailable."""
+    title = story.get("title", "")
+    if os.environ.get("GROQ_API_KEY"):
+        try:
+            from generate_stories_cloud import call_groq
+            dna = story.get("dna", {})
+            reply = call_groq(
+                "You write YouTube thumbnail text. Reply with JSON {\"text\": \"...\"}: 3 to 5 words, "
+                "ALL CAPS, no punctuation except ? or !, naming the betrayal or twist of this story "
+                "so a stranger wants to know what happens. Never reuse the title wording wholesale.",
+                f"Title: {title}\nConflict: {dna.get('conflict', '')}\nHook: {dna.get('hook', '')}")
+            text = re.sub(r"[^A-Za-z0-9?! ']", "", str(reply.get("text", ""))).upper().split()
+            if 2 <= len(text) <= 6:
+                return " ".join(text)
+        except Exception as e:
+            print(f"[thumbnail] Groq text failed, using title words: {e}")
+    return hook_text(title)
 
 
 def _fit_text(d, text, max_w, max_h):
-    """Largest font that fits when the words are split over 1-3 lines."""
     words = text.split()
     best = None
     for n in (1, 2, 3):
         per = -(-len(words) // n)
         chunks = [" ".join(words[i:i + per]) for i in range(0, len(words), per)]
-        for size in range(230, 59, -6):
+        for size in range(220, 59, -6):
             f = ImageFont.truetype(FONT, size)
             if (max(d.textlength(c, font=f) for c in chunks) <= max_w
                     and len(chunks) * size * 1.05 <= max_h):
@@ -97,32 +102,26 @@ def _fit_text(d, text, max_w, max_h):
     return best or (ImageFont.truetype(FONT, 60), words, 60)
 
 
-def make_thumbnail(title: str, out_path: str) -> str:
-    rng = random.Random(int(hashlib.md5(title.encode()).hexdigest()[:8], 16))
-    mood = mood_for(title)
-    top, bot = rng.choice(PALETTES)
-    img = Image.new("RGB", (W, H))
-    px = ImageDraw.Draw(img)
-    for y in range(H):
-        t = y / H
-        px.line([(0, y), (W, y)], fill=tuple(int(top[i] * (1 - t) + bot[i] * t) for i in range(3)))
+def make_thumbnail(video: str, text: str, out_path: str) -> str:
+    img = best_frame(video)
+    scale = max(W / img.width, H / img.height)
+    img = img.resize((int(img.width * scale) + 1, int(img.height * scale) + 1))
+    img = img.crop(((img.width - W) // 2, (img.height - H) // 2,
+                    (img.width - W) // 2 + W, (img.height - H) // 2 + H))
 
-    face = _character(mood, rng) or _draw_face(520, mood)
-    scale = min(560 / face.width, 640 / face.height) if face.height > 640 else 1
-    face = face.resize((int(face.width * scale), int(face.height * scale)))
-    glow = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    glow.paste(face, (W - face.width - 20, H - face.height - 10), face)
-    shadow = glow.filter(ImageFilter.GaussianBlur(18))
-    img.paste((255, 255, 255), (0, 0), shadow.split()[3].point(lambda a: a // 2))
-    img.paste(glow, (0, 0), glow)
+    shade = Image.new("L", (W, H), 0)
+    sd = ImageDraw.Draw(shade)
+    for y in range(H):
+        sd.line([(0, y), (W, y)], fill=int(200 * max(0, (y / H - 0.25) / 0.75) ** 1.2))
+    img.paste((0, 0, 0), (0, 0), shade)
 
     d = ImageDraw.Draw(img)
-    font, lines, size = _fit_text(d, hook_text(title), 690, 600)
-    y = (H - len(lines) * size * 1.05) / 2
+    font, lines, size = _fit_text(d, text, W - 120, 300)
+    y = H - 40 - len(lines) * size * 1.05
     for line in lines:
         for dx, dy in [(-6, -6), (6, -6), (-6, 6), (6, 6), (0, 9)]:
-            d.text((50 + dx, y + dy), line, font=font, fill=(20, 10, 30))
-        d.text((50, y), line, font=font, fill=(255, 245, 120))
+            d.text((60 + dx, y + dy), line, font=font, fill=(20, 10, 30))
+        d.text((60, y), line, font=font, fill=(255, 245, 120))
         y += size * 1.05
 
     for q in (88, 80, 70, 60):
@@ -142,4 +141,4 @@ def set_thumbnail(youtube, video_id: str, path: str):
 
 
 if __name__ == "__main__":
-    print(make_thumbnail(sys.argv[1], sys.argv[2]))
+    print(make_thumbnail(sys.argv[1], sys.argv[3], sys.argv[2]))
