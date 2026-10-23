@@ -163,3 +163,21 @@ alter table ig_token enable row level security;
 --     attempts int not null default 0, last_error text, queue_id bigint,
 --     created_at timestamptz not null default now(), used_at timestamptz
 -- );
+
+-- (g) Subscriber and audience tracking (applied 2026-10-23). The audit found no
+--     way to say which videos or formats bring subscribers; these answer it.
+--
+-- alter table story_metrics add column if not exists subscribers_gained bigint,
+--   add column if not exists subscribers_lost bigint, add column if not exists shares bigint;
+--
+-- create table if not exists channel_breakdown (
+--   id bigserial primary key,
+--   collected_on date not null default current_date,
+--   dimension text not null,        -- 'day' | 'traffic' | 'subscribed' | 'country'
+--   content_type text not null,     -- 'SHORTS' | 'VIDEO_ON_DEMAND' | 'ALL'
+--   value text not null,            -- day, traffic source, SUBSCRIBED/UNSUBSCRIBED, country
+--   views bigint, minutes numeric, subs_gained bigint, subs_lost bigint,
+--   collected_at timestamptz not null default now(),
+--   unique (collected_on, dimension, content_type, value)
+-- );
+-- alter table channel_breakdown enable row level security;

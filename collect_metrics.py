@@ -173,6 +173,144 @@ def fetch_retention(creds, video_ids: list[str]) -> dict[str, dict]:
     return out
 
 
+def fetch_subscriber_stats(creds, video_ids: list[str]) -> dict[str, dict]:
+    """Lifetime subscribers gained/lost and shares per video.
+
+    Kept apart from fetch_retention() on purpose: it is the newest part of the
+    job, and a rejected metric combination must not be able to cost the
+    watch-time numbers that already work.
+    """
+    from googleapiclient.discovery import build
+
+    analytics = build("youtubeAnalytics", "v2", credentials=creds)
+    today = date.today().isoformat()
+    out: dict[str, dict] = {}
+    for i in range(0, len(video_ids), ANALYTICS_BATCH):
+        chunk = video_ids[i:i + ANALYTICS_BATCH]
+        resp = google_call("subscriber stats", analytics.reports().query(
+            ids="channel==MINE",
+            startDate=ANALYTICS_START,
+            endDate=today,
+            dimensions="video",
+            metrics="subscribersGained,subscribersLost,shares",
+            filters="video==" + ",".join(chunk),
+            maxResults=len(chunk),
+        ))
+        cols = [h["name"] for h in resp.get("columnHeaders", [])]
+        for row in resp.get("rows", []):
+            rec = dict(zip(cols, row))
+            out[rec["video"]] = {
+                "subscribers_gained": rec.get("subscribersGained"),
+                "subscribers_lost": rec.get("subscribersLost"),
+                "shares": rec.get("shares"),
+            }
+    print(f"[metrics] Subscribers: {len(out)}/{len(video_ids)} videos")
+    return out
+
+
+# --- Channel-level audience breakdown ----------------------------------------
+# Answers the questions per-video numbers cannot: do Shorts or long videos bring
+# subscribers, where do views come from (the Shorts feed, search, browse...),
+# what share of viewers already subscribe, and which countries watch.
+# Window is the trailing 28 days, re-snapshotted daily; every query is
+# independent and best-effort, because Google rejects some metric/dimension
+# pairings and the daily snapshot above must never depend on this.
+BREAKDOWN_DAYS = 28
+CONTENT_TYPES = ["SHORTS", "VIDEO_ON_DEMAND"]
+
+
+def _channel_report(analytics, label, start, end, dimensions, metrics, filters=None,
+                    sort=None, max_results=None):
+    kw = dict(ids="channel==MINE", startDate=start, endDate=end,
+              dimensions=dimensions, metrics=metrics)
+    if filters:
+        kw["filters"] = filters
+    if sort:
+        kw["sort"] = sort
+    if max_results:
+        kw["maxResults"] = max_results
+    resp = google_call(label, analytics.reports().query(**kw))
+    cols = [h["name"] for h in resp.get("columnHeaders", [])]
+    return [dict(zip(cols, row)) for row in resp.get("rows", [])]
+
+
+def collect_channel_breakdown(sb, creds) -> int:
+    """Write the channel breakdown rows. Returns how many rows were written."""
+    from datetime import timedelta
+    from googleapiclient.discovery import build
+
+    analytics = build("youtubeAnalytics", "v2", credentials=creds)
+    today = date.today()
+    end = today.isoformat()
+    start = (today - timedelta(days=BREAKDOWN_DAYS)).isoformat()
+    rows: list[dict] = []
+
+    def add(dimension, content_type, value, rec):
+        rows.append({
+            "collected_on": end, "dimension": dimension, "content_type": content_type,
+            "value": str(value), "views": rec.get("views"),
+            "minutes": rec.get("estimatedMinutesWatched"),
+            "subs_gained": rec.get("subscribersGained"), "subs_lost": rec.get("subscribersLost"),
+        })
+
+    def attempt(label, fn):
+        try:
+            fn()
+        except Exception as e:
+            print(f"[metrics] Breakdown '{label}' skipped: {str(e)[:200]}")
+
+    # Daily totals per content type: the subscribers-per-1,000-views trend.
+    def daily():
+        for r in _channel_report(analytics, "daily", start, end, "day,creatorContentType",
+                                 "views,estimatedMinutesWatched,subscribersGained,subscribersLost",
+                                 sort="day"):
+            add("day", r["creatorContentType"], r["day"], r)
+    attempt("daily by content type", daily)
+
+    # Where views come from, and which source actually produces subscribers.
+    for ct in CONTENT_TYPES:
+        def traffic(ct=ct):
+            try:
+                recs = _channel_report(
+                    analytics, f"traffic {ct}", start, end, "insightTrafficSourceType",
+                    "views,estimatedMinutesWatched,subscribersGained",
+                    filters=f"creatorContentType=={ct}", sort="-views")
+            except Exception:
+                recs = _channel_report(
+                    analytics, f"traffic {ct} (views only)", start, end,
+                    "insightTrafficSourceType", "views,estimatedMinutesWatched",
+                    filters=f"creatorContentType=={ct}", sort="-views")
+            for r in recs:
+                add("traffic", ct, r["insightTrafficSourceType"], r)
+        attempt(f"traffic sources {ct}", traffic)
+
+        # Subscribers versus non-subscribers among viewers.
+        def subscribed(ct=ct):
+            for r in _channel_report(analytics, f"subscribed {ct}", start, end,
+                                     "subscribedStatus", "views,estimatedMinutesWatched",
+                                     filters=f"creatorContentType=={ct}"):
+                add("subscribed", ct, r["subscribedStatus"], r)
+        attempt(f"subscribed status {ct}", subscribed)
+
+    # Audience countries (all content): is this really a US audience?
+    def country():
+        for r in _channel_report(analytics, "countries", start, end, "country",
+                                 "views,estimatedMinutesWatched,subscribersGained",
+                                 sort="-views", max_results=15):
+            add("country", "ALL", r["country"], r)
+    attempt("countries", country)
+
+    if not rows:
+        print("[metrics] Channel breakdown: nothing returned.")
+        return 0
+    for i in range(0, len(rows), 200):
+        sb.table("channel_breakdown").upsert(
+            rows[i:i + 200], on_conflict="collected_on,dimension,content_type,value").execute()
+    print(f"[metrics] Channel breakdown: wrote {len(rows)} rows "
+          f"({len({(r['dimension'], r['content_type']) for r in rows})} breakdowns).")
+    return len(rows)
+
+
 def videos_needing_curves(sb) -> list[tuple[str, int]]:
     """(youtube_id, age_days) for videos old enough that have no curve yet.
 
@@ -427,13 +565,22 @@ def main():
               f"[metrics] Re-run the local OAuth flow with that scope added and "
               f"refresh GOOGLE_TOKEN_PICKLE_B64 to collect completion rates.")
 
+    # Subscribers gained and shares per video. Optional, like everything newer
+    # than the first snapshot: a failure is logged and the rest still writes.
+    subs = {}
+    if ANALYTICS_SCOPE in scopes:
+        try:
+            subs = fetch_subscriber_stats(creds, video_ids)
+        except Exception as e:
+            print(f"[metrics] Subscriber stats skipped ({str(e)[:160]}).")
+
     today = date.today().isoformat()
     rows = []
     for vid in video_ids:
         if vid not in stats and vid not in retention:
             continue  # deleted, private, or not ours
         rows.append({"youtube_id": vid, "collected_on": today,
-                     **stats.get(vid, {}), **retention.get(vid, {})})
+                     **stats.get(vid, {}), **retention.get(vid, {}), **subs.get(vid, {})})
 
     if not rows:
         sys.exit("[metrics] No metrics returned for any video.")
@@ -444,6 +591,12 @@ def main():
         sb.table("story_metrics").upsert(
             rows[i:i + 100], on_conflict="youtube_id,collected_on").execute()
     print(f"[metrics] Wrote {len(rows)} snapshots for {today}.")
+
+    if ANALYTICS_SCOPE in scopes:
+        try:
+            collect_channel_breakdown(sb, creds)
+        except Exception as e:
+            print(f"[metrics] Channel breakdown crashed ({str(e)[:160]}); snapshot above is saved.")
 
     curves_all_failed = False
     # Curves need the same Analytics scope as the averages. Without it there
