@@ -1,4 +1,4 @@
-# Pipeline checkpoint — 2026-10-11
+# Pipeline checkpoint — 2026-10-24
 
 A snapshot of how Twisty! StoryVault runs, why it is set up this way, and what
 is still open. Update this in place rather than adding dated copies.
@@ -106,10 +106,65 @@ long-form is a quality check only), then cut the losers and re-weight.
 Confounders to remember: thumbnails went live on long-form 2026-10-23, the
 cartoon lane runs daily, and the hook change merged 2026-10-15.
 
+## Added since 2026-10-11
+
+- **Subscriber and audience tracking.** `collect_metrics.py` records per-video
+  `subscribers_gained/lost/shares` in `story_metrics` and fills
+  `channel_breakdown` (daily, traffic source, subscribed status, country, each
+  split Shorts vs long-form, last 28 days). First read: ~1.2% of Shorts views
+  come from subscribers; Shorts views are almost all the Shorts feed; long-form
+  gets almost no search or channel-page views. Shorts ~1.0 subs per 1k views,
+  long-form ~3.4; US ~65% of audience.
+- **Long-form thumbnails.** `thumbnail.py` takes the sharpest of 12 frames from
+  the finished video (8-60% in), darkens the bottom and adds 3-5 words of
+  story-based text (Groq, falls back to title words). `upload_to_youtube`
+  sets it for the `long` variant only, best effort (log line "Thumbnail not
+  set" if the channel is not phone-verified). **Not yet seen on a real upload**;
+  check the first 21:30 UTC long-form after 2026-10-23.
+- **Audit (2026-10-23).** Long-form is the critical failure (median 13 views,
+  60% leave in the first 10%). Shorts reach has plateaued, CTAs are ineffective,
+  cartoons lose viewers early (hook change merged 2026-10-15). Re-audit
+  cartoon vs stock once there is a week of data after the hook change.
+- **Decided against:** AI cute-animal videos (saturated, low subscriber
+  conversion, policy risk, muddles the channel's audience signal).
+
+## The character film (not built, planned)
+
+Goal: a character-driven "movie", 10 min now and 1 hour later, with the owner's
+own characters (Maya, Vanessa, Daniel, Leo have images; a 16-person cast is
+planned), a distinct voice per character, no narrator, rendered on RunPod with
+open models. `film/the-will-part-2.md` is a full Part 2 script, 34-shot list
+with prompts, TTS script and RunPod order of work.
+- **"The Will" was invented by Claude on 2026-10-15** (Daniel reads his will,
+  Vanessa goes after the firm, Maya and Leo find a forged page). It is not a
+  channel story. **Part 1 does not exist yet**; Part 2 assumes the recap in its
+  section 1. "The Pitch He Stole" (Short, 2026-10-05) is a different, workplace
+  story. Open question for the owner: rebuild Part 2 around the pitch story, or
+  write a proper Part 1 of "The Will".
+- Open-model route found by research: voice design (MOSS-VoiceGenerator or
+  Qwen3-TTS VoiceDesign) -> MOSS-TTSD dialogue -> LongCat-Video-Avatar /
+  InfiniteTalk talking video; Wan 2.2 for non-dialogue shots; Qwen-Image-Edit
+  for stills; SeedVR2 upscale. Models make 5-15 s clips, at most 2 speakers per
+  shot, so cut shot/reverse-shot. MiniMax-H3 is unusable (licence excludes
+  US/EU/UK/Korea); JoyAI-Echo is non-commercial.
+- Flow (Google) works for the owner (Omni 15 credits per 10 s; 1,000 monthly +
+  50 daily credits). Suggested Chapter 1 in Flow with ~500 credits, as 3-4
+  chapters over a month, to test whether viewers stay.
+- The owner made a Short, "The Stolen pitch" (AI-labelled, realistic woman in a
+  yellow jacket), outside this repo's pipeline; the model and workflow behind
+  it are unknown to Claude.
+- Idea under review: github.com/lemomo-ai/lemo-opuscar (MIT, film styles made
+  in code, tuned for Claude Opus 5.5, Kokoro TTS). Possibly useful for cartoon
+  pacing/sound and a new long-form look; not for lip-synced character dialogue.
+  Only its README was read; next step was to read `DIRECTOR.md` and
+  `TECHNIQUE.md` and borrow what helps.
+
 ## Open items
 
-- Compare the `cartoon` and `short` lanes in `story_metrics` after about a
-  week of daily cartoons (from 2026-10-11), and the hook/CTA experiment arms.
+- Compare the `cartoon` and `short` lanes in `story_metrics` (hook change merged
+  2026-10-15) and the hook/CTA experiment arms.
+- Theme experiment review is scheduled for 2026-11-26 (see above).
+- Pin `openai/gpt-oss-120b` via `/model` on the Telegram bot if not done.
 - Re-enable the `trial` lane once Instagram allows trial Reels on the account.
 - Delete the `previews` branch (it held a cloned-voice sample) and, if unused,
   the voice sample in `rendered-videos/voice/`.
