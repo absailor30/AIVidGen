@@ -94,6 +94,18 @@ how recently a video was posted — anything older than ~5 days barely moves.
   already live on YouTube — that is deliberate, so an Instagram or bookkeeping
   problem cannot pass silently. Read the log before assuming nothing posted.
 
+## Theme experiment (2026-10-24 to 2026-11-23)
+
+Four new themes (Neighbour & Roommate Conflicts, Family Money & Borrowed Cash,
+Bridesmaid & Wedding Party Drama, Holiday Dinner Blow-Up) run at weight 2 each,
+8 of 20, in shorts and long-form alike. **Do not change `THEME_WEIGHTS` before
+the review**: moving them mid-run is what makes the comparison unreadable. At
+the review, compare median day-3 views and subs per 1k views by theme from
+`story_metrics` (shorts: about 12 videos per new theme; long-form: about 3, so
+long-form is a quality check only), then cut the losers and re-weight.
+Confounders to remember: thumbnails went live on long-form 2026-10-23, the
+cartoon lane runs daily, and the hook change merged 2026-10-15.
+
 ## Open items
 
 - Compare the `cartoon` and `short` lanes in `story_metrics` after about a
