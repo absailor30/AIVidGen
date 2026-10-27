@@ -1,4 +1,4 @@
-"""Assemble "The Stolen Pitch": edge-tts narration + ffmpeg edit.
+"""Assemble "The Stolen Pitch": Kokoro (or edge-tts) narration + ffmpeg edit.
 
 Run on the pod:
     python /workspace/story1/assemble.py
@@ -9,21 +9,38 @@ Writes /workspace/story1/out/stolen_pitch.mp4 (1080x1920).
 Each segment = one narration chunk + the clip pieces shown under it.
 Clip pieces are speed-adjusted together so the visuals end exactly when that
 segment's narration ends. Tweak the (start, end) trim points after a first watch.
+
+Voices: Kokoro by default (free, CPU, one voice per character). Start a
+segment's text with "VANESSA: " etc. to voice it as that character; no prefix
+means the narrator. TTS=edge falls back to edge-tts Jenny.
+Kokoro needs: pip install kokoro-onnx soundfile (model files download once to
+/workspace/kokoro, ~350MB).
 """
 import asyncio
 import json
 import os
 import subprocess
-
-import edge_tts
+import urllib.request
 
 BASE = "/workspace/story1"
 CLIPS = f"{BASE}/clips"
 WORK = "/root/story1_work"   # local disk: faster, no volume permission issues
 OUT = f"{BASE}/out"
 
-VOICE = "en-US-JennyNeural"   # same voice as render_from_supabase.py
+TTS = os.environ.get("TTS", "kokoro")
+VOICE = "en-US-JennyNeural"   # edge-tts fallback, same voice as render_from_supabase.py
 RATE = "+20%"                 # repo uses ~1.4x for shorts; slower here for a drama
+KOKORO_DIR = "/workspace/kokoro"
+KOKORO_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/"
+# speaker -> (Kokoro voice, speed)
+VOICES = {
+    "NARR": ("af_heart", 1.15),
+    "MAYA": ("af_heart", 1.1),
+    "ARIA": ("af_heart", 1.05),
+    "VANESSA": ("af_bella", 1.15),
+    "DANIEL": ("bm_george", 1.0),
+    "LEO": ("am_adam", 1.1),
+}
 GAP = 0.25                    # silence after each segment (seconds)
 FPS = 24
 W, H = 704, 1280              # MiniMax output size
@@ -83,8 +100,35 @@ def duration(path):
     return float(json.loads(out)["format"]["duration"])
 
 
-async def tts(text, path):
-    await edge_tts.Communicate(text, VOICE, rate=RATE).save(path)
+def split_speaker(text):
+    head, sep, rest = text.partition(": ")
+    if sep and head.isupper() and head in VOICES:
+        return head, rest
+    return "NARR", text
+
+
+_kokoro = None
+
+
+def tts(text, path):
+    """Write narration for one segment to path (any format ffmpeg reads)."""
+    speaker, text = split_speaker(text)
+    if TTS == "edge":
+        import edge_tts
+        asyncio.run(edge_tts.Communicate(text, VOICE, rate=RATE).save(path))
+        return
+    global _kokoro
+    if _kokoro is None:
+        import kokoro_onnx
+        os.makedirs(KOKORO_DIR, exist_ok=True)
+        for f in ("kokoro-v1.0.onnx", "voices-v1.0.bin"):
+            if not os.path.exists(f"{KOKORO_DIR}/{f}"):
+                urllib.request.urlretrieve(KOKORO_URL + f, f"{KOKORO_DIR}/{f}")
+        _kokoro = kokoro_onnx.Kokoro(f"{KOKORO_DIR}/kokoro-v1.0.onnx", f"{KOKORO_DIR}/voices-v1.0.bin")
+    import soundfile
+    voice, speed = VOICES[speaker]
+    audio, sr = _kokoro.create(text, voice=voice, speed=speed, lang="en-us")
+    soundfile.write(path, audio, sr)
 
 
 def srt_time(t):
@@ -109,10 +153,11 @@ def main():
     for i, seg in enumerate(SEGMENTS):
         text, pieces = seg[0], seg[1]
         gap = seg[2] if len(seg) > 2 else GAP
-        mp3 = f"{WORK}/seg{i:02}.mp3"
-        asyncio.run(tts(text, mp3))
+        raw = f"{WORK}/seg{i:02}_raw.{'mp3' if TTS == 'edge' else 'wav'}"
+        tts(text, raw)
+        text = split_speaker(text)[1]   # captions without the speaker tag
         wav = f"{WORK}/seg{i:02}.wav"
-        run(["ffmpeg", "-y", "-i", mp3, "-af", f"apad=pad_dur={gap}", "-ar", "48000", "-ac", "2", wav])
+        run(["ffmpeg", "-y", "-i", raw, "-af", f"apad=pad_dur={gap}", "-ar", "48000", "-ac", "2", wav])
         target = duration(wav)
 
         # Cut each piece (trim + own speed + effects), no audio
