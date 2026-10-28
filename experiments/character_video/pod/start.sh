@@ -16,7 +16,6 @@ cd /root
 [ -d Wan2GP ] || git clone https://github.com/deepbeepmeep/Wan2GP.git
 cd Wan2GP
 rm -rf outputs && ln -s /workspace/outputs outputs
-[ -f /workspace/wgp_config.json ] || echo '{}' > /workspace/wgp_config.json
 rm -f wgp_config.json && ln -s /workspace/wgp_config.json wgp_config.json
 
 # The archive is keyed on requirements.txt + torch version + wheel, so a WanGP
