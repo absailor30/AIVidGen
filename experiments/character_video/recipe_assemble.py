@@ -13,7 +13,7 @@ Each segment = one line (speaker + text, or "" for a silent beat) + the visuals 
 Clips keep their length; stills share whatever time the line still needs. If a line is
 longer than its clips and there are no stills, the last clip holds its final frame.
 """
-import os, subprocess, json, glob, hashlib
+import os, re, subprocess, json, glob, hashlib
 import numpy as np, soundfile as sf
 
 CLIPS = os.environ.get("CLIPS", "clips")
@@ -22,14 +22,14 @@ KOKORO = os.environ.get("KOKORO", "/workspace/kokoro")
 WORK = os.environ.get("WORK", "work")
 OUT = os.environ.get("OUT", "recipe_clause_part1.mp4")
 W, H, FPS = 1080, 1920, 30
-GAP = 0.35            # pause after each line
+GAP = 0.55            # pause after each line
 CLIP_VOL = 0.30       # MiniMax ambience under the voices
 INTRO = 1.8           # seconds for a character's first-appearance card
 COLOURS = {"NARR": "white", "ARIA": "0xF2C46D", "VANESSA": "0xFF6B6B", "DANIEL": "0x7FB0E0",
            "LEO": "0x7CD67C", "MAYA": "0xFFA94D"}
 VOICES = {            # speaker -> (Kokoro voice, speed)
-    "NARR": ("af_heart", 1.0), "ARIA": ("af_heart", 1.0), "VANESSA": ("af_bella", 1.05),
-    "DANIEL": ("bm_george", 0.95), "LEO": ("am_adam", 1.05), "MAYA": ("af_sarah", 1.05),
+    "NARR": ("af_heart", 0.9), "ARIA": ("af_heart", 0.9), "VANESSA": ("af_bella", 0.95),
+    "DANIEL": ("bm_george", 0.85), "LEO": ("am_adam", 0.95), "MAYA": ("af_sarah", 0.95),
 }
 
 # Vanessa's cast stills wear the leather jacket; in this episode she wears the blazer
@@ -132,15 +132,27 @@ def find_still(name):
 
 
 _tts = None
+SENT_PAUSE = 0.18     # pause between sentences inside one line
 def speak(speaker, text, path):
+    """Voice one line sentence by sentence; return [(start, end, sentence)] for exact captions."""
     global _tts
     if _tts is None:
         from kokoro_onnx import Kokoro
         _tts = Kokoro(f"{KOKORO}/kokoro-v1.0.onnx", f"{KOKORO}/voices-v1.0.bin")
     voice, speed = VOICES[speaker]
-    audio, sr = _tts.create(text, voice=voice, speed=speed, lang="en-us")
-    pad = np.zeros(int(sr * GAP), dtype=audio.dtype)
-    sf.write(path, np.concatenate([audio, pad]), sr)
+    sents = [x.strip() for x in re.split(r"(?<=[.!?])\s+", text) if x.strip()]
+    parts, timing, t, sr = [], [], 0.0, 24000
+    for k, sent in enumerate(sents):
+        audio, sr = _tts.create(sent, voice=voice, speed=speed, lang="en-us")
+        timing.append((t, t + len(audio) / sr, sent))
+        t += len(audio) / sr
+        parts.append(audio)
+        if k < len(sents) - 1:
+            parts.append(np.zeros(int(sr * SENT_PAUSE), dtype=audio.dtype)); t += SENT_PAUSE
+    parts.append(np.zeros(int(sr * GAP), dtype=parts[0].dtype))
+    sf.write(path, np.concatenate(parts), sr)
+    json.dump(timing, open(path + ".json", "w"))
+    return timing
 
 
 SCALE = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps={FPS}"
@@ -211,7 +223,7 @@ def main():
         voice = None
         if text:
             voice = f"{WORK}/v{i:02}.wav"
-            if not os.path.exists(voice):      # resumable: reuse finished work
+            if not os.path.exists(voice + ".json"):      # resumable: reuse finished work
                 speak(speaker, text, voice)
             need = sf.info(voice).duration
         else:
@@ -242,14 +254,17 @@ def main():
             run(["ffmpeg", "-y", "-i", body, "-i", voice, "-filter_complex",
                  "[1:a]aresample=48000,apad[v];[0:a][v]amix=inputs=2:duration=first:normalize=0[a]",
                  "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-ar", "48000", seg])
-            words = text.split()
-            chunks = [" ".join(words[k:k + 5]) for k in range(0, len(words), 5)]
-            speech = need - GAP
-            for k, ch in enumerate(chunks):
-                a = t0 + speech * k / len(chunks); b = t0 + speech * (k + 1) / len(chunks)
-                if k == 0 and speaker != "NARR":
-                    ch = f"{{\\b1}}{speaker}:{{\\b0}} " + ch
-                subs.append((a, b, ch, speaker))
+            timing = json.load(open(voice + ".json"))
+            first = True
+            for a0, b0, sent in timing:
+                words = sent.split()
+                chunks = [" ".join(words[k:k + 6]) for k in range(0, len(words), 6)]
+                for k, ch in enumerate(chunks):
+                    a = t0 + a0 + (b0 - a0) * k / len(chunks); b = t0 + a0 + (b0 - a0) * (k + 1) / len(chunks)
+                    if first and speaker != "NARR":
+                        ch = f"{{\\b1}}{speaker}:{{\\b0}} " + ch
+                    first = False
+                    subs.append((a, b, ch, speaker))
         else:
             seg = body
         seg_files.append(seg)
