@@ -1,0 +1,249 @@
+[
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the elegant restaurant dining room from <Picture 1>, preserving its layout, lighting and colours.\n<Subject 2> is the man shown in <Picture 2> (face close-up) and <Picture 3> (full body), preserving his identity, face, short silver hair, trimmed silver beard, navy three-piece suit and burgundy tie. <Picture 4> shows only his proud, smiling facial expression; ignore the clothing in <Picture 4>.\nsummary:\n[reference generation] A proud older man raises a champagne glass to his staff.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - layout and lighting.\n<Subject 2> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in <Subject 1>. From the very first frame exactly one person is in the scene, and from the very first frame he is beaming with pride. He looks to the left of the camera at a crowd off-screen, never into the lens. No readable text anywhere.\n[Shot 1] Medium shot, waist up. <Subject 2> raises a glass of champagne high toward the off-screen crowd, smiling warmly, then nods. Slow camera push-in.\noverall_soundscape: murmuring staff, a glass clink. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/sets/set_dining.jpg",
+   "/workspace/cast/Daniel/daniel_close.jpg",
+   "/workspace/cast/Daniel/daniel_ref.jpg",
+   "/workspace/cast/Daniel/daniel_smile.jpg"
+  ],
+  "output_filename": "clip03_daniel_toast"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the elegant restaurant dining room from <Picture 1>, preserving its layout, lighting and colours.\n<Subject 2> is the man shown in <Picture 2> (face close-up) and <Picture 3> (full body), preserving his identity, face, messy short ginger hair, freckles, round black glasses, white chef whites and white apron.\nsummary:\n[reference generation] A young chef glances sideways with a worried look.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - layout and lighting.\n<Subject 2> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in <Subject 1>. From the very first frame exactly one person is in the scene, and from the very first frame he looks worried and uneasy. He glances to the right of the camera at someone off-screen, never into the lens. No readable text anywhere.\n[Shot 1] Close-up, head and shoulders. <Subject 2> stands among clapping staff, stops clapping and glances sideways with a worried frown. Static camera.\noverall_soundscape: applause fading. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/sets/set_dining.jpg",
+   "/workspace/cast/Leo/leo_chef_close.jpg",
+   "/workspace/cast/Leo/leo_chef_ref.jpg"
+  ],
+  "output_filename": "clip06_leo_glance"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the small restaurant back office from <Picture 1>, preserving its layout, lighting and colours.\n<Subject 2> is the woman shown in <Picture 2> (face close-up) and <Picture 3> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 4> shows only her smug facial expression; ignore the clothing in <Picture 4>.\nsummary:\n[reference generation] A smug woman reads payroll on a tablet behind a desk.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - layout and lighting.\n<Subject 2> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in <Subject 1>. From the very first frame exactly one person is in the scene, and from the very first frame she is smug and self-satisfied, a faint smirk. She looks down at a tablet, then up to the right of the camera at someone off-screen, never into the lens. The tablet screen faces away from the camera. No readable text anywhere.\n[Shot 1] Medium shot, waist up. <Subject 2> sits behind the desk swiping a tablet, pauses, then looks up across the desk with a satisfied smirk. Static camera.\noverall_soundscape: quiet office, tablet taps. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/sets/set_office.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_smug.jpg"
+  ],
+  "output_filename": "clip07_vanessa_tablet"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the professional restaurant kitchen from <Picture 1>, preserving its layout, lighting and colours.\n<Subject 2> is the man shown in <Picture 2> (face close-up) and <Picture 3> (full body), preserving his identity, face, messy short ginger hair, freckles, round black glasses, white chef whites and white apron. <Picture 4> shows only his knowing, grinning facial expression; ignore the clothing in <Picture 4>.\nsummary:\n[reference generation] A young chef slowly breaks into a knowing grin.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - layout and lighting.\n<Subject 2> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in <Subject 1>. From the very first frame exactly one person is in the scene, and from the very first frame he has a knowing look. He looks to the left of the camera at someone off-screen, never into the lens. No readable text anywhere.\n[Shot 1] Close-up, head and shoulders. <Subject 2> listens, then slowly breaks into a wide knowing grin and nods once. Static camera.\noverall_soundscape: kitchen hum. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/sets/set_kitchen.jpg",
+   "/workspace/cast/Leo/leo_chef_close.jpg",
+   "/workspace/cast/Leo/leo_chef_ref.jpg",
+   "/workspace/cast/Leo/leo_smug.jpg"
+  ],
+  "output_filename": "clip14_leo_grin"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the professional restaurant kitchen from <Picture 1>, preserving its layout, lighting and colours.\n<Subject 2> is the man shown in <Picture 2> (face close-up) and <Picture 3> (full body), preserving his identity, face, messy short ginger hair, freckles, round black glasses, white chef whites and white apron.\nsummary:\n[reference generation] A chef tastes a sauce and winces.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - layout and lighting.\n<Subject 2> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in <Subject 1>. From the very first frame exactly one person is in the scene, and from the very first frame he is focused. He looks down at a spoon, never into the lens. No readable text anywhere.\n[Shot 1] Close-up, head and shoulders. <Subject 2> lifts a spoon of sauce from a pot to his mouth, tastes it, and winces in disgust. Static camera.\noverall_soundscape: sizzling pans, busy kitchen. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/sets/set_kitchen.jpg",
+   "/workspace/cast/Leo/leo_chef_close.jpg",
+   "/workspace/cast/Leo/leo_chef_ref.jpg"
+  ],
+  "output_filename": "clip15_leo_taste"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the professional restaurant kitchen from <Picture 1>, preserving its layout, lighting and colours.\n<Subject 2> is the woman shown in <Picture 2> (face close-up) and <Picture 3> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 4> shows only her humiliated, angry facial expression; ignore the clothing in <Picture 4>.\n<Subject 3> is the man shown in <Picture 5> (full body), preserving his identity, face, messy short ginger hair, freckles, round black glasses, white chef whites and white apron.\nsummary:\n[reference generation] A kitchen falls silent as a furious woman is humiliated in front of her staff.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - layout and lighting.\n<Subject 2> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\n<Subject 3> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in <Subject 1>. From the very first frame exactly two people are in the scene, and from the very first frame <Subject 2> stands in the foreground, flushed and furious, and <Subject 3> stands behind her at a counter. Neither looks into the lens. No readable text anywhere.\n[Shot 1] Medium shot. <Subject 2> in the foreground stares to the left of the camera, her face reddening; behind her <Subject 3> freezes and a metal spoon slips from his hand and clatters onto the counter. Static camera.\noverall_soundscape: sudden silence, a spoon clattering. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/sets/set_kitchen.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_angry.jpg",
+   "/workspace/cast/Leo/leo_chef_ref.jpg"
+  ],
+  "output_filename": "clip19_kitchen_freeze"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the rooftop terrace at night from <Picture 1>, preserving its layout, lighting and colours.\n<Subject 2> is the man shown in <Picture 2> (face close-up) and <Picture 3> (full body), preserving his identity, face, short silver hair, trimmed silver beard, navy three-piece suit and burgundy tie.\n<Subject 3> is the woman shown in <Picture 4> (full body), preserving her identity, face, sleek dark brown low ponytail, light olive skin, crisp white shirt with rolled sleeves, black trousers and nude nails.\nsummary:\n[reference generation] An older man and a younger woman talk quietly at a terrace railing at night.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - layout and lighting.\n<Subject 2> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\n<Subject 3> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in <Subject 1>. From the very first frame exactly two people are in the scene, and from the very first frame <Subject 2> and <Subject 3> stand side by side at the railing, both serious. Neither looks into the lens. No readable text anywhere.\n[Shot 1] Medium shot at night. <Subject 2> and <Subject 3> stand at the railing with city lights behind; he turns to her and speaks quietly while she keeps looking out at the city, unmoved. Static camera.\noverall_soundscape: night city ambience, faint music from inside. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/sets/set_terrace.jpg",
+   "/workspace/cast/Daniel/daniel_close.jpg",
+   "/workspace/cast/Daniel/daniel_ref.jpg",
+   "/workspace/cast/Aria/aria_ref.jpg"
+  ],
+  "output_filename": "clip20_terrace_talk"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the professional restaurant kitchen from <Picture 1>, preserving its layout, lighting and colours.\n<Subject 2> is the woman shown in <Picture 2> (face close-up) and <Picture 3> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 4> shows only her proud, smiling facial expression; ignore the clothing in <Picture 4>.\nsummary:\n[reference generation] A woman proudly presents a celebrity chef to her kitchen staff.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - layout and lighting.\n<Subject 2> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in <Subject 1>. From the very first frame exactly one person is in the scene, and from the very first frame she is smiling proudly. A man in a designer black chef's jacket stands beside her with his back to the camera. She never looks into the lens. No readable text anywhere.\n[Shot 1] Medium shot, waist up. <Subject 2> gestures proudly toward the man in the black chef's jacket beside her, looking to the left of the camera at staff off-screen. Static camera.\noverall_soundscape: staff murmuring. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/sets/set_kitchen.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_smile.jpg"
+  ],
+  "output_filename": "clip23_vanessa_laurent"
+ }
+]

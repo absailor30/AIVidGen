@@ -154,3 +154,78 @@ CLIPS2 = [
   "Medium close-up, chest up. <Subject 1> sits alone at the desk in near darkness, staring at a neatly folded white apron in front of her, not moving. Very slow camera push-in.",
   "silence, a distant clock ticking.")},
 ]
+
+# ---- batch 3: clips using set images, Leo's chef look, and two-person shots ----
+LOOK["leo"] = ("man", "his", "messy short ginger hair, freckles, round black glasses, white chef whites and white apron")
+def r(look, n_refs_before, expr, summary, place_ref, state, shot, sound, extra_subject=None, people=1):
+    g, pos, desc = LOOK[look]
+    a, b = n_refs_before + 1, n_refs_before + 2
+    subs = [f"<Subject 1> is the {place_ref} from <Picture 1>, preserving its layout, lighting and colours.",
+            f"<Subject 2> is the {g} shown in <Picture {a}> (face close-up) and <Picture {b}> (full body), preserving {pos} identity, face, {desc}."]
+    ret = ["<Subject 1> (appears in [Shot 1]): fully_preserved - layout and lighting.",
+           "<Subject 2> (appears in [Shot 1]): fully_preserved - face, hair and outfit."]
+    nxt = b + 1
+    if expr:
+        subs[1] += f" <Picture {nxt}> shows only {pos} {expr} facial expression; ignore the clothing in <Picture {nxt}>."
+        nxt += 1
+    if extra_subject:
+        g2, pos2, desc2 = LOOK[extra_subject]
+        subs.append(f"<Subject 3> is the {g2} shown in <Picture {nxt}> (full body), preserving {pos2} identity, face, {desc2}.")
+        ret.append("<Subject 3> (appears in [Shot 1]): fully_preserved - face, hair and outfit.")
+    n = {1: "exactly one person is", 2: "exactly two people are"}[people]
+    return f"""subject_definitions:
+{chr(10).join(subs)}
+summary:
+[reference generation] {summary}
+retention_analysis:
+{chr(10).join(ret)}
+detailed_description:
+The target video is a vertical cinematic shot in <Subject 1>. From the very first frame {n} in the scene, and from the very first frame {state} No readable text anywhere.
+[Shot 1] {shot}
+overall_soundscape: {sound} No one speaks, no dialogue, no voices.
+non_diegetic_music: none."""
+
+S = "/workspace/sets/"
+LC = ["leo_chef_close", "leo_chef_ref"]
+CLIPS3 = [
+ {"name": "clip03_daniel_toast", "refs": [S+"set_dining"] + D + ["daniel_smile"], "prompt": r("daniel", 1, "proud, smiling",
+  "A proud older man raises a champagne glass to his staff.", "elegant restaurant dining room",
+  "he is beaming with pride. He looks to the left of the camera at a crowd off-screen, never into the lens.",
+  "Medium shot, waist up. <Subject 2> raises a glass of champagne high toward the off-screen crowd, smiling warmly, then nods. Slow camera push-in.",
+  "murmuring staff, a glass clink.")},
+ {"name": "clip06_leo_glance", "refs": [S+"set_dining"] + LC, "prompt": r("leo", 1, "",
+  "A young chef glances sideways with a worried look.", "elegant restaurant dining room",
+  "he looks worried and uneasy. He glances to the right of the camera at someone off-screen, never into the lens.",
+  "Close-up, head and shoulders. <Subject 2> stands among clapping staff, stops clapping and glances sideways with a worried frown. Static camera.",
+  "applause fading.")},
+ {"name": "clip07_vanessa_tablet", "refs": [S+"set_office"] + VN + ["vanessa_smug"], "prompt": r("vanessa", 1, "smug",
+  "A smug woman reads payroll on a tablet behind a desk.", "small restaurant back office",
+  "she is smug and self-satisfied, a faint smirk. She looks down at a tablet, then up to the right of the camera at someone off-screen, never into the lens. The tablet screen faces away from the camera.",
+  "Medium shot, waist up. <Subject 2> sits behind the desk swiping a tablet, pauses, then looks up across the desk with a satisfied smirk. Static camera.",
+  "quiet office, tablet taps.")},
+ {"name": "clip14_leo_grin", "refs": [S+"set_kitchen"] + LC + ["leo_smug"], "prompt": r("leo", 1, "knowing, grinning",
+  "A young chef slowly breaks into a knowing grin.", "professional restaurant kitchen",
+  "he has a knowing look. He looks to the left of the camera at someone off-screen, never into the lens.",
+  "Close-up, head and shoulders. <Subject 2> listens, then slowly breaks into a wide knowing grin and nods once. Static camera.",
+  "kitchen hum.")},
+ {"name": "clip15_leo_taste", "refs": [S+"set_kitchen"] + LC, "prompt": r("leo", 1, "",
+  "A chef tastes a sauce and winces.", "professional restaurant kitchen",
+  "he is focused. He looks down at a spoon, never into the lens.",
+  "Close-up, head and shoulders. <Subject 2> lifts a spoon of sauce from a pot to his mouth, tastes it, and winces in disgust. Static camera.",
+  "sizzling pans, busy kitchen.")},
+ {"name": "clip19_kitchen_freeze", "refs": [S+"set_kitchen"] + VN + ["vanessa_angry", "leo_chef_ref"], "prompt": r("vanessa", 1, "humiliated, angry",
+  "A kitchen falls silent as a furious woman is humiliated in front of her staff.", "professional restaurant kitchen",
+  "<Subject 2> stands in the foreground, flushed and furious, and <Subject 3> stands behind her at a counter. Neither looks into the lens.",
+  "Medium shot. <Subject 2> in the foreground stares to the left of the camera, her face reddening; behind her <Subject 3> freezes and a metal spoon slips from his hand and clatters onto the counter. Static camera.",
+  "sudden silence, a spoon clattering.", extra_subject="leo", people=2)},
+ {"name": "clip20_terrace_talk", "refs": [S+"set_terrace"] + D + ["aria_ref"], "prompt": r("daniel", 1, "",
+  "An older man and a younger woman talk quietly at a terrace railing at night.", "rooftop terrace at night",
+  "<Subject 2> and <Subject 3> stand side by side at the railing, both serious. Neither looks into the lens.",
+  "Medium shot at night. <Subject 2> and <Subject 3> stand at the railing with city lights behind; he turns to her and speaks quietly while she keeps looking out at the city, unmoved. Static camera.",
+  "night city ambience, faint music from inside.", extra_subject="aria", people=2)},
+ {"name": "clip23_vanessa_laurent", "refs": [S+"set_kitchen"] + VN + ["vanessa_smile"], "prompt": r("vanessa", 1, "proud, smiling",
+  "A woman proudly presents a celebrity chef to her kitchen staff.", "professional restaurant kitchen",
+  "she is smiling proudly. A man in a designer black chef's jacket stands beside her with his back to the camera. She never looks into the lens.",
+  "Medium shot, waist up. <Subject 2> gestures proudly toward the man in the black chef's jacket beside her, looking to the left of the camera at staff off-screen. Static camera.",
+  "staff murmuring.")},
+]
