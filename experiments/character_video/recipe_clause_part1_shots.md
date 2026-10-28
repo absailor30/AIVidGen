@@ -23,6 +23,12 @@ narration and dialogue.
 
 Chef Laurent is an extra — prompt only, always back to camera, no ref.
 
+## Rules learned from the clip 9 test
+- Minimum length in WanGP is ~4.5s (108 frames). Generate 4.5s, trim to the best 2–3s in the edit.
+- ⚡ reactions: put the end expression **from the very first frame** and name where the character looks ("to the left of the camera at someone off-screen"). Asking for a change mid-clip doesn't work — she just keeps smiling.
+- ⚡ clips get a third reference, the matching expression still (`X_angry`, `X_shock`, `X_smug`…), after close-up and full body, plus this at the end of the subject line:
+  `<Picture 3> shows only her angry facial expression; ignore the clothing in <Picture 3>.`
+
 ## Prompt template
 Fill the `{…}` parts from the table. Keep it on one block, no blank lines.
 ```
