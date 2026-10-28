@@ -1,0 +1,152 @@
+[
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 3> shows only her smug facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A woman looks down with contempt at a folded white apron on her desk.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair, makeup, nails and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a small restaurant back office with a wooden desk and warm lamp light. From the very first frame exactly one person is in the scene, and from the very first frame her expression is cold contempt: one eyebrow slightly raised, lips pressed in a faint sneer. She looks down at the desk, never into the lens. No readable text anywhere.\n[Shot 1] Close-up, head, shoulders and hands. <Subject 1> sits behind the desk looking down at a neatly folded white apron in front of her. Her red-nailed fingers hover just above it without touching, then slowly withdraw. Slow camera push-in.\noverall_soundscape: quiet office, faint lamp hum. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_smug.jpg"
+  ],
+  "output_filename": "clip02_vanessa_apron"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 3> shows only her angry facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A furious woman, lost for words, jabs at her tablet.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair, makeup, nails and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a small restaurant back office with a wooden desk and warm lamp light. From the very first frame exactly one person is in the scene, and from the very first frame she is angry and flustered: jaw clenched, eyes narrowed. She looks to the right of the camera at someone off-screen, never into the lens. The tablet screen faces away from the camera. No readable text anywhere.\n[Shot 1] Close-up, chest up. <Subject 1> opens her mouth as if to reply, closes it again without a word, looks down and stabs at a tablet on the desk with one finger, hard, twice. Static camera.\noverall_soundscape: quiet office, two sharp taps on glass. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_angry.jpg"
+  ],
+  "output_filename": "clip10_vanessa_tablet"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 3> shows only her angry facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A woman glares in silent fury at a doorway someone just walked out of.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair, makeup, nails and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a small restaurant back office with a wooden desk and warm lamp light. From the very first frame exactly one person is in the scene, and from the very first frame she is seething: jaw clenched hard, nostrils flared, eyes fixed and cold. She stares to the left of the camera at an open doorway, never into the lens. No readable text anywhere.\n[Shot 1] Tight close-up, head and shoulders, face fills the frame. <Subject 1> sits rigid behind the desk staring at the doorway. Her jaw tightens, she swallows hard, and her fingers curl into a fist on the desk. Slow camera push-in.\noverall_soundscape: quiet office, a door creaking as it slowly swings. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_angry.jpg"
+  ],
+  "output_filename": "clip12_vanessa_door"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 3> shows only her shocked facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A woman's confidence collapses as someone walks away from her.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair, makeup, nails and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a busy professional restaurant kitchen with stainless steel counters and soft steam. From the very first frame exactly one person is in the scene, and from the very first frame her face is pale and unsettled: lips slightly parted, eyes widening, any smile gone. She looks to the right of the camera, following someone walking away off-screen, never into the lens. No readable text anywhere.\n[Shot 1] Close-up, chest up. <Subject 1> stands still in the kitchen, her eyes tracking someone leaving. She swallows, her shoulders drop slightly, and she grips the edge of the steel counter. Static camera.\noverall_soundscape: kitchen hum, distant clatter, footsteps fading away. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_shock.jpg"
+  ],
+  "output_filename": "clip24_vanessa_drains"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 3> shows only her shocked facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A woman freezes in shock at news she has just heard.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair, makeup, nails and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a busy professional restaurant kitchen with stainless steel counters and soft steam. From the very first frame exactly one person is in the scene, and from the very first frame she is frozen in shock: eyes wide, mouth slightly open, colour drained from her face. She stares to the left of the camera at someone off-screen holding a phone, never into the lens. No readable text anywhere.\n[Shot 1] Tight close-up, face fills the frame. <Subject 1> stands completely still, not blinking, then slowly raises one hand to her collarbone. Very slow camera push-in.\noverall_soundscape: kitchen hum suddenly quiet, a single phone buzz. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_shock.jpg"
+  ],
+  "output_filename": "clip26_vanessa_freeze"
+ }
+]
