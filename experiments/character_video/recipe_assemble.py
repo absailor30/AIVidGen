@@ -19,6 +19,7 @@ import numpy as np, soundfile as sf
 CLIPS = os.environ.get("CLIPS", "clips")
 STILLS = os.environ.get("STILLS", "cast").split(":")
 KOKORO = os.environ.get("KOKORO", "/workspace/kokoro")
+FISH = os.environ.get("FISH", "")   # folder with line_NN.wav (Fish voices) and lip_NN.mp4 (lip-synced clips)
 WORK = os.environ.get("WORK", "work")
 OUT = os.environ.get("OUT", "recipe_clause_part1.mp4")
 W, H, FPS = 1080, 1920, 30
@@ -155,6 +156,23 @@ def speak(speaker, text, path):
     return timing
 
 
+def fish_voice(text, src, path, lead=0.0):
+    """Use a Fish line: pad it (lead silence before a lip clip, GAP after) and estimate sentence timing."""
+    audio, sr = sf.read(src, dtype="float32")
+    if audio.ndim > 1:
+        audio = audio.mean(axis=1)
+    speech = len(audio) / sr
+    sents = [x.strip() for x in re.split(r"(?<=[.!?])\s+", text) if x.strip()]
+    total_chars = sum(len(x) for x in sents)
+    timing, t = [], lead
+    for sent in sents:
+        d = speech * len(sent) / total_chars
+        timing.append((t, t + d, sent)); t += d
+    out = np.concatenate([np.zeros(int(sr * lead), dtype="float32"), audio, np.zeros(int(sr * GAP), dtype="float32")])
+    sf.write(path, out, sr)
+    json.dump(timing, open(path + ".json", "w"))
+
+
 SCALE = f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps={FPS}"
 SILENT = ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
 ENC = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
@@ -180,6 +198,12 @@ def piece(v, seconds, out, idx):
         vf = f"trim={a}:{b},setpts=PTS-STARTPTS,{SCALE},tpad=stop_mode=clone:stop_duration={hold:.3f}"
         af = f"atrim={a}:{b},asetpts=PTS-STARTPTS,volume={CLIP_VOL},aresample=48000,apad"
         run(["ffmpeg", "-y", "-i", src, "-vf", vf, "-af", af, "-t", f"{seconds:.3f}", *ENC, out])
+    elif kind == "L":   # lip-synced clip: picture only, the clean voice is laid over it
+        src = v[1]
+        hold = max(0.0, seconds - dur(src))
+        vf = f"{SCALE},tpad=stop_mode=clone:stop_duration={hold:.3f}"
+        run(["ffmpeg", "-y", "-i", src, *SILENT, "-vf", vf, "-map", "0:v", "-map", "1:a",
+             "-t", f"{seconds:.3f}", *ENC, out])
     elif kind == "s":
         kenburns(find_still(v[1]), seconds, out, zoom_in=idx % 2 == 0)
     elif kind == "f":
@@ -221,14 +245,20 @@ def main():
     seg_files, subs, t0 = [], [], 0.0
     for i, (speaker, text, visuals) in enumerate(SEGMENTS):
         voice = None
+        lip = f"{FISH}/lip_{i:02}.mp4" if FISH else ""
+        if lip and speaker != "NARR" and os.path.exists(lip):
+            visuals = [v for v in visuals if v[0] == "i"] + [("L", lip)]
         if text:
             voice = f"{WORK}/v{i:02}.wav"
-            if not os.path.exists(voice + ".json"):      # resumable: reuse finished work
+            fish = f"{FISH}/line_{i:02}.wav" if FISH else ""
+            if fish and os.path.exists(fish):
+                fish_voice(text, fish, voice, INTRO * sum(v[0] == "i" for v in visuals))
+            elif not os.path.exists(voice + ".json"):      # resumable: reuse finished work
                 speak(speaker, text, voice)
             need = sf.info(voice).duration
         else:
             need = 0.0
-        fixed = sum(min(v[3], 4.45) - v[2] for v in visuals if v[0] == "c") + sum(v[2] for v in visuals if v[0] == "t") + INTRO * sum(v[0] == "i" for v in visuals)
+        fixed = sum(min(v[3], 4.45) - v[2] for v in visuals if v[0] == "c") + sum(v[2] for v in visuals if v[0] == "t") + sum(dur(v[1]) for v in visuals if v[0] == "L") + INTRO * sum(v[0] == "i" for v in visuals)
         flex = [v for v in visuals if v[0] in "sf"]
         total = max(need, fixed + (1.6 * len(flex) if flex else 0))
         each = (total - fixed) / len(flex) if flex else 0
@@ -238,6 +268,8 @@ def main():
                 s = min(v[3], 4.45) - v[2]
                 if not flex and j == len(visuals) - 1:
                     s += total - fixed      # hold the last frame if the line runs long
+            elif v[0] == "L":
+                s = dur(v[1]) + (total - fixed if not flex and j == len(visuals) - 1 else 0)
             else:
                 s = v[2] if v[0] == "t" else INTRO if v[0] == "i" else each
             key = hashlib.md5(repr((v, round(s, 2), i + j)).encode()).hexdigest()[:10]
