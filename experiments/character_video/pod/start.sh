@@ -46,7 +46,11 @@ export HF_XET_HIGH_PERFORMANCE=1
 export HF_HUB_ENABLE_HF_TRANSFER=1
 
 set +e
-if python -c "import sageattention" 2>/dev/null; then
+# The SageAttention wheel is built for Ada (sm_89: L40, L40S). It imports on other
+# GPUs but crashes at run time, so only use it when the chip matches.
+CC=$(python -c "import torch; print('%d.%d' % torch.cuda.get_device_capability())" 2>/dev/null)
+echo "GPU compute capability: $CC"
+if [ "$CC" = "8.9" ] && python -c "import sageattention" 2>/dev/null; then
   python wgp.py --profile 1 --attention sage2 --listen --server-port 7860
 else
   python wgp.py --profile 1 --listen --server-port 7860
