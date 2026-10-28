@@ -149,7 +149,7 @@ ENC = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv4
 def kenburns(img, seconds, out, zoom_in=True):
     n = max(1, int(round(seconds * FPS)))
     z = f"min(1+0.10*on/{n},1.10)" if zoom_in else f"max(1.10-0.10*on/{n},1.0)"
-    vf = (f"scale={W*2}:{H*2}:force_original_aspect_ratio=increase,crop={W*2}:{H*2},"
+    vf = (f"scale={int(W*1.25)}:{int(H*1.25)}:force_original_aspect_ratio=increase,crop={int(W*1.25)}:{int(H*1.25)},"
           f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={n}:s={W}x{H}:fps={FPS},setsar=1")
     run(["ffmpeg", "-y", "-loop", "1", "-i", img, *SILENT, "-vf", vf, "-t", f"{seconds:.3f}",
          "-map", "0:v", "-map", "1:a", *ENC, out])
@@ -196,7 +196,8 @@ def main():
         voice = None
         if text:
             voice = f"{WORK}/v{i:02}.wav"
-            speak(speaker, text, voice)
+            if not os.path.exists(voice):      # resumable: reuse finished work
+                speak(speaker, text, voice)
             need = sf.info(voice).duration
         else:
             need = 0.0
@@ -213,7 +214,8 @@ def main():
             else:
                 s = v[2] if v[0] == "t" else each
             p = f"{WORK}/p{i:02}_{j}.mp4"
-            piece(v, s, p, i + j)
+            if not os.path.exists(p):
+                piece(v, s, p, i + j)
             parts.append(p)
         lst = f"{WORK}/l{i:02}.txt"
         open(lst, "w").write("".join(f"file '{os.path.abspath(p)}'\n" for p in parts))
