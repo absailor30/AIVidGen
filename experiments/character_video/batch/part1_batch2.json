@@ -1,0 +1,451 @@
+[
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek dark brown low ponytail, light olive skin, crisp white shirt with rolled sleeves, black trousers and nude nails. <Picture 3> shows only her cold, calm facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A calm woman folds a white apron and slides it across a steel counter.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a busy professional restaurant kitchen with stainless steel counters and soft steam. From the very first frame exactly one person is in the scene, and from the very first frame her face is calm, cold and unreadable. She looks down at her hands, never into the lens. No readable text anywhere.\n[Shot 1] Medium close-up, chest up with hands visible. <Subject 1> folds a white apron into a neat square on a steel counter, smooths it once and slides it forward away from her. Slow camera push-in toward her face.\noverall_soundscape: quiet kitchen hum, soft fabric rustle. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Aria/aria_close.jpg",
+   "/workspace/cast/Aria/aria_ref.jpg",
+   "/workspace/cast/Aria/aria_cold.jpg"
+  ],
+  "output_filename": "clip01_aria_apron"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 3> shows only her smiling facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A glamorous woman steps forward beaming to take the spotlight.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in an elegant modern restaurant dining room in the morning, warm wood tables with white linen, brass pendant lights. From the very first frame exactly one person is in the scene, and from the very first frame she is beaming with a proud, triumphant smile, chin lifted. She looks to the left of the camera at a crowd off-screen, never into the lens. No readable text anywhere.\n[Shot 1] Medium shot, waist up. <Subject 1> takes two confident steps forward toward the off-screen crowd, smoothing her blazer dress, then stops and raises her chin. Slow camera push-in.\noverall_soundscape: light applause, heels clicking on a wooden floor. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_smile.jpg"
+  ],
+  "output_filename": "clip04_vanessa_beaming"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek dark brown low ponytail, light olive skin, crisp white shirt with rolled sleeves, black trousers and nude nails. <Picture 3> shows only her calm, unreadable facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A woman claps politely, her face giving nothing away.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in an elegant modern restaurant dining room in the morning, warm wood tables with white linen, brass pendant lights. From the very first frame exactly one person is in the scene, and from the very first frame her face is calm and unreadable, a polite neutral expression. She looks to the left of the camera at someone off-screen, never into the lens. No readable text anywhere.\n[Shot 1] Close-up, chest up. <Subject 1> claps slowly and politely three times, her expression not changing at all, her eyes steady. Static camera.\noverall_soundscape: light applause around her. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Aria/aria_close.jpg",
+   "/workspace/cast/Aria/aria_ref.jpg",
+   "/workspace/cast/Aria/aria_unbothered.jpg"
+  ],
+  "output_filename": "clip05_aria_clap"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek dark brown low ponytail, light olive skin, crisp white shirt with rolled sleeves, black trousers and nude nails. <Picture 3> shows only her cold, calm facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A woman calmly unties her apron and lays it on her boss's desk.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a small restaurant back office with a wooden desk and warm lamp light. From the very first frame exactly one person is in the scene, and from the very first frame she is calm, composed and cold. She looks across the desk to the right of the camera at someone off-screen, never into the lens. No readable text anywhere.\n[Shot 1] Medium shot, waist up. <Subject 1> stands in front of the desk, unhurriedly unties a white apron from her waist, folds it once and sets it neatly on the desk. Static camera.\noverall_soundscape: quiet office, fabric rustle. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Aria/aria_close.jpg",
+   "/workspace/cast/Aria/aria_ref.jpg",
+   "/workspace/cast/Aria/aria_cold.jpg"
+  ],
+  "output_filename": "clip08_aria_unties"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek dark brown low ponytail, light olive skin, crisp white shirt with rolled sleeves, black trousers and nude nails. <Picture 3> shows only her calm facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A woman opens a door wider and walks out without looking back.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a small restaurant back office with a wooden desk and warm lamp light. From the very first frame exactly one person is in the scene, and from the very first frame she is calm and unbothered. She never looks into the lens. No readable text anywhere.\n[Shot 1] Medium shot. <Subject 1> pulls the office door wide open, pauses for a beat, then walks out through it without looking back. Static camera.\noverall_soundscape: door creak, footsteps on a hard floor. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Aria/aria_close.jpg",
+   "/workspace/cast/Aria/aria_ref.jpg",
+   "/workspace/cast/Aria/aria_unbothered.jpg"
+  ],
+  "output_filename": "clip11_aria_door"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek dark brown low ponytail, light olive skin, crisp white shirt with rolled sleeves, black trousers and nude nails.\nsummary:\n[reference generation] A woman pins a laminated sheet to a steel fridge door.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a busy professional restaurant kitchen with stainless steel counters and soft steam. From the very first frame exactly one person is in the scene, and from the very first frame she is calm and deliberate. She looks at the fridge, never into the lens. The sheet is blank white with no readable text. No readable text anywhere.\n[Shot 1] Medium shot, waist up. <Subject 1> presses a blank laminated sheet onto a stainless steel fridge door with a magnet and smooths it flat with her palm, then steps back to look at it. Static camera.\noverall_soundscape: kitchen hum, a soft magnet click. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Aria/aria_close.jpg",
+   "/workspace/cast/Aria/aria_ref.jpg"
+  ],
+  "output_filename": "clip13_aria_fridge"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, curly shoulder-length black hair, warm brown skin, mustard yellow blazer over a white camisole and dark jeans. <Picture 3> shows only her frustrated facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A frustrated restaurant manager pushes into the kitchen carrying returned plates.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a busy professional restaurant kitchen with stainless steel counters and soft steam. From the very first frame exactly one person is in the scene, and from the very first frame she is frustrated and stressed, brow furrowed. She looks to the right of the camera at someone off-screen, never into the lens. No readable text anywhere.\n[Shot 1] Medium shot, waist up. <Subject 1> pushes through swinging kitchen doors carrying two plates of food, stops and holds them up. Static camera.\noverall_soundscape: busy kitchen, swing doors flapping, sizzling pans. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Maya/maya_v2_close.jpg",
+   "/workspace/cast/Maya/maya_v2_ref.jpg",
+   "/workspace/cast/Maya/maya_angry.jpg"
+  ],
+  "output_filename": "clip16_maya_plates"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 3> shows only her angry facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A furious woman storms into a busy kitchen holding a phone.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a busy professional restaurant kitchen with stainless steel counters and soft steam. From the very first frame exactly one person is in the scene, and from the very first frame she is furious, jaw clenched, eyes blazing. She looks to the left of the camera at someone off-screen, never into the lens. The phone screen faces away from the camera. No readable text anywhere.\n[Shot 1] Medium shot, waist up. <Subject 1> storms into the kitchen with a phone in her hand and stops abruptly, glaring. Static camera.\noverall_soundscape: busy kitchen, sharp heel steps. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_angry.jpg"
+  ],
+  "output_filename": "clip17_vanessa_storms"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 3> shows only her angry facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A furious woman glances at a fridge and realises she has been outplayed.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a busy professional restaurant kitchen with stainless steel counters and soft steam. From the very first frame exactly one person is in the scene, and from the very first frame she is angry and humiliated: jaw clenched, lips pressed tight. Her eyes flick to the right of the camera toward a fridge off-screen, never into the lens. No readable text anywhere.\n[Shot 1] Close-up, head and shoulders. <Subject 1> glances sideways at something off-screen, holds the look, and her jaw tightens; she swallows hard. Static camera.\noverall_soundscape: kitchen hum. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_angry.jpg"
+  ],
+  "output_filename": "clip18_vanessa_fridge"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the man shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving his identity, face, short silver hair, trimmed silver beard, navy three-piece suit and burgundy tie. <Picture 3> shows only his troubled facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A troubled older man looks through a lit window at night.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a restaurant rooftop terrace at night with string lights, an iron railing and city lights beyond. From the very first frame exactly one person is in the scene, and from the very first frame he is troubled and quietly sad. He looks to the left of the camera through a lit window off-screen, never into the lens. No readable text anywhere.\n[Shot 1] Close-up, head and shoulders, at night under string lights. <Subject 1> stares through the window for a long moment, then lowers his eyes and exhales. Static camera.\noverall_soundscape: night city ambience, faint music from inside. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Daniel/daniel_close.jpg",
+   "/workspace/cast/Daniel/daniel_ref.jpg",
+   "/workspace/cast/Daniel/daniel_sad.jpg"
+  ],
+  "output_filename": "clip21_daniel_window"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the man shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving his identity, face, short silver hair, trimmed silver beard, navy three-piece suit and burgundy tie. <Picture 3> shows only his troubled facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] An older man stands and walks away avoiding someone's eyes.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a restaurant rooftop terrace at night with string lights, an iron railing and city lights beyond. From the very first frame exactly one person is in the scene, and from the very first frame he is uneasy and avoids eye contact. He never looks into the lens. No readable text anywhere.\n[Shot 1] Medium shot at night. <Subject 1> rises from a terrace chair, buttons his jacket, avoids looking at anyone and walks away along the terrace. Static camera.\noverall_soundscape: night city ambience, footsteps on wood. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Daniel/daniel_close.jpg",
+   "/workspace/cast/Daniel/daniel_ref.jpg",
+   "/workspace/cast/Daniel/daniel_sad.jpg"
+  ],
+  "output_filename": "clip22_daniel_leaves"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, curly shoulder-length black hair, warm brown skin, mustard yellow blazer over a white camisole and dark jeans. <Picture 3> shows only her shocked facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A woman reads a message on her phone and her eyes widen.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a busy professional restaurant kitchen with stainless steel counters and soft steam. From the very first frame exactly one person is in the scene, and from the very first frame she is startled, eyes wide, lips parted. She looks down at a phone in her hand, never into the lens. The phone screen faces away from the camera. No readable text anywhere.\n[Shot 1] Close-up, head and shoulders. <Subject 1> looks down at her phone as it buzzes, reads it, and slowly raises her eyes in disbelief. Static camera.\noverall_soundscape: kitchen hum, a single phone buzz. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Maya/maya_v2_close.jpg",
+   "/workspace/cast/Maya/maya_v2_ref.jpg",
+   "/workspace/cast/Maya/maya_shock.jpg"
+  ],
+  "output_filename": "clip25_maya_phone"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek dark brown low ponytail, light olive skin, crisp white shirt with rolled sleeves, black trousers and nude nails. <Picture 3> shows only her calm facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A woman walks out of a kitchen without looking back.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a busy professional restaurant kitchen with stainless steel counters and soft steam. From the very first frame exactly one person is in the scene, and from the very first frame she is calm and unbothered. She never looks into the lens. No readable text anywhere.\n[Shot 1] Wide shot, full body. <Subject 1> walks steadily away from the camera toward swinging kitchen doors and pushes through them without looking back. Static camera.\noverall_soundscape: kitchen hum, footsteps, swing doors. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Aria/aria_close.jpg",
+   "/workspace/cast/Aria/aria_ref.jpg",
+   "/workspace/cast/Aria/aria_unbothered.jpg"
+  ],
+  "output_filename": "clip27_aria_walks"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek dark brown hair worn loose, light olive skin, oversized grey knit sweater and black jeans. <Picture 3> shows only her quietly confident facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A woman lifts the lid off a jar at home and smiles faintly.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a small cosy apartment kitchen at night with a single warm pendant light and glass jars on a wooden counter. From the very first frame exactly one person is in the scene, and from the very first frame she is quietly confident with a faint knowing smile. She looks down at the counter, never into the lens. No readable text anywhere.\n[Shot 1] Close-up, head, shoulders and hands. <Subject 1> lifts the lid off a glass jar on the counter; a wisp of steam rises; a faint smile crosses her face. Slow camera push-in.\noverall_soundscape: quiet night, a glass lid clink. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Aria/aria_home_close.jpg",
+   "/workspace/cast/Aria/aria_home_ref.jpg",
+   "/workspace/cast/Aria/aria_unbothered.jpg"
+  ],
+  "output_filename": "clip28_aria_jar"
+ },
+ {
+  "image_mode": 0,
+  "resolution": "704x1280",
+  "video_length": 107,
+  "seed": -1,
+  "num_inference_steps": 8,
+  "guidance_phases": 1,
+  "flow_shift": 12,
+  "sample_solver": "euler",
+  "repeat_generation": 1,
+  "multi_prompts_gen_type": "PG",
+  "activated_loras": [],
+  "image_prompt_type": "",
+  "video_prompt_type": "I",
+  "audio_prompt_type": "",
+  "image_refs_relative_size": 100,
+  "remove_background_images_ref": 0,
+  "custom_settings": {
+   "h3_mask_mode": "grouped_rows"
+  },
+  "model_type": "minimax_h3_ref2va_pruned_pdd",
+  "video_quality": "libx264_8",
+  "prompt": "subject_definitions:\n<Subject 1> is the woman shown in <Picture 1> (face close-up) and <Picture 2> (full body), preserving her identity, face, sleek platinum blonde hair, red lipstick, black blazer dress and red nails. <Picture 3> shows only her stunned facial expression; ignore the clothing in <Picture 3>.\nsummary:\n[reference generation] A woman sits alone in a dark office staring at a folded apron.\nretention_analysis:\n<Subject 1> (appears in [Shot 1]): fully_preserved - face, hair and outfit.\ndetailed_description:\nThe target video is a vertical cinematic shot in a small restaurant back office at night, lit only by one dim desk lamp. From the very first frame exactly one person is in the scene, and from the very first frame she is stunned and uneasy, the confidence gone from her face. She stares down at the desk, never into the lens. No readable text anywhere.\n[Shot 1] Medium close-up, chest up. <Subject 1> sits alone at the desk in near darkness, staring at a neatly folded white apron in front of her, not moving. Very slow camera push-in.\noverall_soundscape: silence, a distant clock ticking. No one speaks, no dialogue, no voices.\nnon_diegetic_music: none.",
+  "image_refs": [
+   "/workspace/cast/Vanessa/vanessa_office_close.jpg",
+   "/workspace/cast/Vanessa/vanessa_office_ref.jpg",
+   "/workspace/cast/Vanessa/vanessa_shock.jpg"
+  ],
+  "output_filename": "clip29_vanessa_dark"
+ }
+]
