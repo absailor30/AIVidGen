@@ -7,6 +7,8 @@
 #   - wgp_config.json, so WanGP opens on the last-used model (MiniMax) and
 #     downloads only that one
 #   - outputs and the SageAttention wheel
+# Extra arguments go to wgp.py, e.g. to let Claude drive it over MCP:
+#   bash /workspace/start.sh --mcp-webui --mcp-port 8000 --mcp-allow-read-file-system
 set -e
 TORCH="torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0"
 ENV_DIR=/workspace/env
@@ -51,7 +53,7 @@ set +e
 CC=$(python -c "import torch; print('%d.%d' % torch.cuda.get_device_capability())" 2>/dev/null)
 echo "GPU compute capability: $CC"
 if [ "$CC" = "8.9" ] && python -c "import sageattention" 2>/dev/null; then
-  python wgp.py --profile 1 --attention sage2 --listen --server-port 7860
+  python wgp.py --profile 1 --attention sage2 --listen --server-port 7860 "$@"
 else
-  python wgp.py --profile 1 --listen --server-port 7860
+  python wgp.py --profile 1 --listen --server-port 7860 "$@"
 fi
