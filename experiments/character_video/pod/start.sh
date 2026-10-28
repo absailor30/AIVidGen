@@ -40,7 +40,9 @@ else
   pip cache purge || true
   echo "Saving environment to the volume..."
   rm -f "$ENV_DIR"/venv-*.tar          # keep only the current one (storage is billed)
-  tar -cf "$ARCHIVE.part" -C / root/venv && mv "$ARCHIVE.part" "$ARCHIVE"
+  # Build locally, then one plain copy: the Global volume can't rename files.
+  { tar -cf /root/venv.tar -C / root/venv && cp /root/venv.tar "$ARCHIVE" && rm -f /root/venv.tar; } \
+    || { rm -f /root/venv.tar "$ARCHIVE"; echo "WARNING: could not save the environment; WanGP still starts."; }
 fi
 
 # Faster model downloads: parallel Xet transfers, and hf_transfer for the rest.
