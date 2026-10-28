@@ -13,7 +13,7 @@ Each segment = one line (speaker + text, or "" for a silent beat) + the visuals 
 Clips keep their length; stills share whatever time the line still needs. If a line is
 longer than its clips and there are no stills, the last clip holds its final frame.
 """
-import os, subprocess, json, glob
+import os, subprocess, json, glob, hashlib
 import numpy as np, soundfile as sf
 
 CLIPS = os.environ.get("CLIPS", "clips")
@@ -24,6 +24,9 @@ OUT = os.environ.get("OUT", "recipe_clause_part1.mp4")
 W, H, FPS = 1080, 1920, 30
 GAP = 0.35            # pause after each line
 CLIP_VOL = 0.30       # MiniMax ambience under the voices
+INTRO = 1.8           # seconds for a character's first-appearance card
+COLOURS = {"NARR": "white", "ARIA": "0xF2C46D", "VANESSA": "0xFF6B6B", "DANIEL": "0x7FB0E0",
+           "LEO": "0x7CD67C", "MAYA": "0xFFA94D"}
 VOICES = {            # speaker -> (Kokoro voice, speed)
     "NARR": ("af_heart", 1.0), "ARIA": ("af_heart", 1.0), "VANESSA": ("af_bella", 1.05),
     "DANIEL": ("bm_george", 0.95), "LEO": ("am_adam", 1.05), "MAYA": ("af_sarah", 1.05),
@@ -33,17 +36,17 @@ VOICES = {            # speaker -> (Kokoro voice, speed)
 # dress, so her "stills" are freeze frames from her clips.
 SEGMENTS = [
  # Cold open
- ("NARR", "Eight years. Forty-one recipes. Three restaurants built on my food.", [("c", "clip01", 0.3, 4.4)]),
- ("NARR", "And it took my stepsister exactly four minutes to decide I was overpaid.", [("c", "clip02", 0.4, 4.4)]),
+ ("NARR", "Eight years. Forty-one recipes. Three restaurants built on my food.", [("i", "aria_close", "ARIA", "Kitchen Operations Manager. Our narrator."), ("c", "clip01", 0.3, 4.4)]),
+ ("NARR", "And it took my stepsister exactly four minutes to decide I was overpaid.", [("i", "vanessa_office_close", "VANESSA", "The stepsister. New CEO."), ("c", "clip02", 0.4, 4.4)]),
  ("", "", [("t", "THE RECIPE CLAUSE\nPart 1: Not Your Job", 2.8)]),
  # The handover
  ("DANIEL", "Thirty years ago, I opened one little kitchen with a borrowed oven. Today, Harlow and Daughter has three locations and a waiting list. And from Monday... my daughter Vanessa runs it.",
-  [("s", "set_dining"), ("c", "clip03", 0.0, 4.4), ("s", "daniel_smile")]),
+  [("i", "daniel_close", "DANIEL", "Founder. Aria's stepdad."), ("c", "clip03", 0.0, 4.4), ("s", "daniel_smile")]),
  ("NARR", "Daughter. Singular.", [("c", "clip04", 1.6, 4.4)]),
  ("NARR", "I've been in this family since I was eleven. I've been in this kitchen since I was twenty-one. I'm still the stepdaughter who cooks.",
   [("c", "clip05", 0.2, 4.4), ("s", "aria_unbothered")]),
  ("VANESSA", "Thank you, Dad. I promise you, Harlow and Daughter is about to get a lot more... efficient.", [("f", "clip04", 4.3)]),
- ("", "", [("c", "clip06", 1.0, 3.6)]),
+ ("", "", [("i", "leo_chef_close", "LEO", "Sous-chef. Aria's ally."), ("c", "clip06", 1.0, 3.6)]),
  # The cut
  ("VANESSA", "I went through the payroll last night. Interesting reading. Recipe development bonus. Two thousand a month. Since when?",
   [("c", "clip07", 0.0, 4.4), ("f", "clip07", 4.3)]),
@@ -70,7 +73,7 @@ SEGMENTS = [
  # Day three
  ("NARR", "Day three.", [("c", "clip15", 0.5, 4.4)]),
  ("MAYA", "Table six says the short rib tastes like a different restaurant. Table nine just asked if we changed owners. I didn't know what to tell them.",
-  [("c", "clip16", 0.3, 4.4), ("s", "maya_v2_close")]),
+  [("i", "maya_v2_close", "MAYA", "Front of house. Aria's friend."), ("c", "clip16", 0.3, 4.4)]),
  ("VANESSA", "Aria. Fix this. Now.", [("c", "clip17", 0.3, 3.5)]),
  ("ARIA", "Not in my job description. You laminated it. It's on the fridge.", [("s", "aria_unbothered")]),
  ("", "", [("c", "clip18", 0.8, 4.4)]),
@@ -172,6 +175,18 @@ def piece(v, seconds, out, idx):
         frame = f"{WORK}/frame_{clip}_{t}.png"
         run(["ffmpeg", "-y", "-ss", str(t), "-i", f"{CLIPS}/{clip}.mp4", "-frames:v", "1", frame])
         kenburns(frame, seconds, out, zoom_in=idx % 2 == 1)
+    elif kind == "i":
+        _, still, name, role = v
+        tmp = out + ".kb.mp4"
+        kenburns(find_still(still), seconds, tmp, zoom_in=True)
+        nf, rf = out + ".name.txt", out + ".role.txt"
+        open(nf, "w").write(name); open(rf, "w").write(role)
+        col = COLOURS.get(name, "white")
+        vf = (f"drawbox=x=0:y=ih*0.70:w=iw:h=ih*0.14:color=black@0.55:t=fill,"
+              f"drawtext=textfile={nf}:fontcolor={col}:fontsize=96:x=(w-text_w)/2:y=h*0.715,"
+              f"drawtext=textfile={rf}:fontcolor=white:fontsize=46:x=(w-text_w)/2:y=h*0.785")
+        run(["ffmpeg", "-y", "-i", tmp, "-vf", vf, *ENC, out])
+        os.remove(tmp)
     elif kind == "t":
         title, sub = v[1].split("\n")
         tf, sf_ = f"{WORK}/title_{idx}_a.txt", f"{WORK}/title_{idx}_b.txt"
@@ -201,7 +216,7 @@ def main():
             need = sf.info(voice).duration
         else:
             need = 0.0
-        fixed = sum(min(v[3], 4.45) - v[2] for v in visuals if v[0] == "c") + sum(v[2] for v in visuals if v[0] == "t")
+        fixed = sum(min(v[3], 4.45) - v[2] for v in visuals if v[0] == "c") + sum(v[2] for v in visuals if v[0] == "t") + INTRO * sum(v[0] == "i" for v in visuals)
         flex = [v for v in visuals if v[0] in "sf"]
         total = max(need, fixed + (1.6 * len(flex) if flex else 0))
         each = (total - fixed) / len(flex) if flex else 0
@@ -212,8 +227,9 @@ def main():
                 if not flex and j == len(visuals) - 1:
                     s += total - fixed      # hold the last frame if the line runs long
             else:
-                s = v[2] if v[0] == "t" else each
-            p = f"{WORK}/p{i:02}_{j}.mp4"
+                s = v[2] if v[0] == "t" else INTRO if v[0] == "i" else each
+            key = hashlib.md5(repr((v, round(s, 2), i + j)).encode()).hexdigest()[:10]
+            p = f"{WORK}/p_{key}.mp4"
             if not os.path.exists(p):
                 piece(v, s, p, i + j)
             parts.append(p)
@@ -231,7 +247,9 @@ def main():
             speech = need - GAP
             for k, ch in enumerate(chunks):
                 a = t0 + speech * k / len(chunks); b = t0 + speech * (k + 1) / len(chunks)
-                subs.append((a, b, ch))
+                if k == 0 and speaker != "NARR":
+                    ch = f"{{\\b1}}{speaker}:{{\\b0}} " + ch
+                subs.append((a, b, ch, speaker))
         else:
             seg = body
         seg_files.append(seg)
@@ -241,10 +259,17 @@ def main():
     open(lst, "w").write("".join(f"file '{os.path.abspath(s)}'\n" for s in seg_files))
     joined = f"{WORK}/joined.mp4"
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", joined])
-    srt = f"{WORK}/subs.srt"
-    open(srt, "w").write("".join(f"{n+1}\n{srt_time(a)} --> {srt_time(b)}\n{c}\n\n" for n, (a, b, c) in enumerate(subs)))
-    style = "FontName=DejaVu Sans,FontSize=13,Bold=1,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=2,Shadow=0,Alignment=2,MarginV=70"
-    run(["ffmpeg", "-y", "-i", joined, "-vf", f"subtitles={srt}:force_style='{style}'",
+    ass = f"{WORK}/subs.ass"
+    head = ("[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n\n[V4+ Styles]\n"
+            "Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Outline, Shadow, Alignment, MarginV\n")
+    for name, col in COLOURS.items():
+        rgb = "FFFFFF" if col == "white" else col[2:]
+        bgr = rgb[4:6] + rgb[2:4] + rgb[0:2]
+        head += f"Style: {name},DejaVu Sans,64,&H00{bgr},&H00000000,&H64000000,1,5,0,2,330\n"
+    head += "\n[Events]\nFormat: Layer, Start, End, Style, Text\n"
+    t = lambda x: f"{int(x//3600)}:{int(x%3600//60):02}:{x%60:05.2f}"
+    open(ass, "w").write(head + "".join(f"Dialogue: 0,{t(a)},{t(b)},{sp},{c}\n" for a, b, c, sp in subs))
+    run(["ffmpeg", "-y", "-i", joined, "-vf", f"subtitles={ass}",
          "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "copy", OUT])
     print("wrote", OUT, f"{dur(OUT):.1f}s")
 
