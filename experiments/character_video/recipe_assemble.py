@@ -269,7 +269,9 @@ def main():
         visuals = [v for v in visuals if v[0] != "i"]
         lip = f"{FISH}/lip_{i:02}.mp4" if FISH else ""
         if lip and speaker != "NARR" and os.path.exists(lip):
-            visuals = [("L", lip)]
+            # the line's own action shot (if any) plays first as a short establishing cut, then the close-up
+            pre = [("c", v[1], v[2], min(v[3], v[2] + 2.5)) for v in visuals if v[0] == "c"][:1]
+            visuals = pre + [("L", lip)]
             fish = f"{FISH}/line_{i:02}.wav"
             if os.path.exists(fish) and sf.info(fish).duration > dur(lip) + 0.8:
                 visuals.append(SPEAKER_STILL[speaker])   # cut away instead of freezing the face
@@ -279,7 +281,8 @@ def main():
             if fish and os.path.exists(fish):
                 # on a lip-synced shot, end the pause where the clip ends so the face never freezes
                 gap = max(0.1, dur(lip) - sf.info(fish).duration) if any(v[0] == "L" for v in visuals) else GAP
-                fish_voice(text, fish, voice, gap=gap)
+                lead = sum(min(v[3], 4.45) - v[2] for v in visuals if v[0] == "c") if any(v[0] == "L" for v in visuals) else 0.0
+                fish_voice(text, fish, voice, lead=lead, gap=gap)
             elif not os.path.exists(voice + ".json"):      # resumable: reuse finished work
                 speak(speaker, text, voice)
             need = sf.info(voice).duration
