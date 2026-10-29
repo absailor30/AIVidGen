@@ -47,7 +47,7 @@ SEGMENTS = [
  # The handover
  ("DANIEL", "Thirty years ago, I opened one little kitchen with a borrowed oven. Today, Harlow and Daughter has three locations and a waiting list. And from Monday... my daughter Vanessa runs it.",
   [("i", "daniel_close", "DANIEL", "Founder. Aria's stepdad."), ("c", "clip03", 0.0, 4.4), ("s", "daniel_smile")]),
- ("NARR", "Daughter. Singular.", [("c", "clip04", 1.6, 4.4)]),
+ ("NARR", "Daughter. Not daughters.", [("c", "clip04", 1.6, 4.4)]),
  ("NARR", "I've been in this family since I was eleven. I've been in this kitchen since I was twenty-one. I'm still the stepdaughter who cooks.",
   [("c", "clip05", 0.2, 4.4), ("s", "aria_unbothered")]),
  ("VANESSA", "Thank you, Dad. I promise you, Harlow and Daughter is about to get a lot more... efficient.", [("f", "clip04", 4.3)]),
