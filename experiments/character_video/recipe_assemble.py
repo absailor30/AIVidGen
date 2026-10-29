@@ -161,7 +161,7 @@ def speak(speaker, text, path):
     return timing
 
 
-def fish_voice(text, src, path, lead=0.0):
+def fish_voice(text, src, path, lead=0.0, gap=GAP):
     """Use a Fish line: pad it (lead silence before a lip clip, GAP after) and estimate sentence timing."""
     audio, sr = sf.read(src, dtype="float32")
     if audio.ndim > 1:
@@ -170,10 +170,21 @@ def fish_voice(text, src, path, lead=0.0):
     sents = [x.strip() for x in re.split(r"(?<=[.!?])\s+", text) if x.strip()]
     total_chars = sum(len(x) for x in sents)
     timing, t = [], lead
-    for sent in sents:
-        d = speech * len(sent) / total_chars
-        timing.append((t, t + d, sent)); t += d
-    out = np.concatenate([np.zeros(int(sr * lead), dtype="float32"), audio, np.zeros(int(sr * GAP), dtype="float32")])
+    words = json.load(open(src + ".words.json")) if os.path.exists(src + ".words.json") else []
+    if words:   # real word times (faster-whisper); map each sentence onto them by word position
+        n_script, n_heard, k = sum(len(s.split()) for s in sents), len(words), 0
+        for sent in sents:
+            a = min(int(k * n_heard / n_script), n_heard - 1)
+            k += len(sent.split())
+            b = min(max(int(k * n_heard / n_script) - 1, a), n_heard - 1)
+            timing.append((lead + words[a][0], lead + words[b][1], sent))
+    else:
+        for sent in sents:
+            d = speech * len(sent) / total_chars
+            timing.append((t, t + d, sent)); t += d
+    fade = min(len(audio), int(sr * 0.06))           # no click where the line is cut
+    audio = audio.astype("float32"); audio[len(audio) - fade:] *= np.linspace(1, 0, fade, dtype="float32")
+    out = np.concatenate([np.zeros(int(sr * lead), dtype="float32"), audio, np.zeros(int(sr * gap), dtype="float32")])
     sf.write(path, out, sr)
     json.dump(timing, open(path + ".json", "w"))
 
@@ -263,7 +274,9 @@ def main():
             voice = f"{WORK}/v{i:02}.wav"
             fish = f"{FISH}/line_{i:02}.wav" if FISH else ""
             if fish and os.path.exists(fish):
-                fish_voice(text, fish, voice)
+                # on a lip-synced shot, end the pause where the clip ends so the face never freezes
+                gap = max(0.1, dur(lip) - sf.info(fish).duration) if any(v[0] == "L" for v in visuals) else GAP
+                fish_voice(text, fish, voice, gap=gap)
             elif not os.path.exists(voice + ".json"):      # resumable: reuse finished work
                 speak(speaker, text, voice)
             need = sf.info(voice).duration
