@@ -25,6 +25,10 @@ OUT = os.environ.get("OUT", "recipe_clause_part1.mp4")
 W, H, FPS = 1080, 1920, 30
 GAP = 0.55            # pause after each line
 CLIP_VOL = 0.30       # MiniMax ambience under the voices
+# what to cut to when a line outlasts its lip-synced clip (Vanessa's stills wear the wrong outfit,
+# so hers is a freeze frame from one of her clips)
+SPEAKER_STILL = {"ARIA": ("s", "aria_unbothered"), "VANESSA": ("f", "clip07", 4.3), "DANIEL": ("s", "daniel_close"),
+                 "LEO": ("s", "leo_chef_close"), "MAYA": ("s", "maya_v2_close")}
 INTRO = 1.8           # seconds for a character's first-appearance card
 COLOURS = {"NARR": "white", "ARIA": "0xF2C46D", "VANESSA": "0xFF6B6B", "DANIEL": "0x7FB0E0",
            "LEO": "0x7CD67C", "MAYA": "0xFFA94D"}
@@ -248,6 +252,9 @@ def main():
         lip = f"{FISH}/lip_{i:02}.mp4" if FISH else ""
         if lip and speaker != "NARR" and os.path.exists(lip):
             visuals = [v for v in visuals if v[0] == "i"] + [("L", lip)]
+            fish = f"{FISH}/line_{i:02}.wav"
+            if os.path.exists(fish) and sf.info(fish).duration > dur(lip) + 0.8:
+                visuals.append(SPEAKER_STILL[speaker])   # cut away instead of freezing the face
         if text:
             voice = f"{WORK}/v{i:02}.wav"
             fish = f"{FISH}/line_{i:02}.wav" if FISH else ""
