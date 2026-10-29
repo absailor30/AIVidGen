@@ -309,10 +309,23 @@ def main():
         seg_files.append(seg)
         t0 += dur(seg)
         print(f"{i:02} {speaker or '-':8} {dur(seg):5.1f}s  total {t0:6.1f}s", flush=True)
-    lst = f"{WORK}/all.txt"
+    # Join picture and sound separately: each segment's AAC track runs a few ms short of its video,
+    # and stream-copying the segments together lets that add up to a second of drift by the end.
+    # So every segment's sound is cut or padded to exactly its video length as PCM first.
+    lst, alst = f"{WORK}/all.txt", f"{WORK}/all_a.txt"
     open(lst, "w").write("".join(f"file '{os.path.abspath(s)}'\n" for s in seg_files))
-    joined = f"{WORK}/joined.mp4"
-    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", joined])
+    wavs = []
+    for k, s in enumerate(seg_files):
+        vlen = float(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=duration",
+                                     "-of", "csv=p=0", s], capture_output=True, text=True).stdout)
+        w = f"{WORK}/sa{k:02}.wav"
+        run(["ffmpeg", "-y", "-i", s, "-vn", "-af", f"aresample=48000,apad,atrim=0:{vlen:.6f}", "-ac", "2", "-c:a", "pcm_s16le", w])
+        wavs.append(w)
+    open(alst, "w").write("".join(f"file '{os.path.abspath(w)}'\n" for w in wavs))
+    vjoin, ajoin, joined = f"{WORK}/joined_v.mp4", f"{WORK}/joined_a.wav", f"{WORK}/joined.mp4"
+    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-an", "-c", "copy", vjoin])
+    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", alst, "-c", "copy", ajoin])
+    run(["ffmpeg", "-y", "-i", vjoin, "-i", ajoin, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-ar", "48000", joined])
     ass = f"{WORK}/subs.ass"
     head = ("[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n\n[V4+ Styles]\n"
             "Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, Bold, Outline, Shadow, Alignment, MarginV\n")
