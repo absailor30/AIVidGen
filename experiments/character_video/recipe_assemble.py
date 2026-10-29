@@ -32,6 +32,7 @@ SPEAKER_STILL = {"ARIA": ("s", "aria_unbothered"), "VANESSA": ("f", "clip07", 4.
 INTRO = 1.8           # seconds for a character's first-appearance card
 COLOURS = {"NARR": "white", "ARIA": "0xF2C46D", "VANESSA": "0xFF6B6B", "DANIEL": "0x7FB0E0",
            "LEO": "0x7CD67C", "MAYA": "0xFFA94D"}
+THOUGHTS = {"Daughter. Not daughters.": "ARIA"}   # narration lines that are a character thinking
 VOICES = {            # speaker -> (Kokoro voice, speed)
     "NARR": ("af_heart", 0.9), "ARIA": ("af_heart", 0.9), "VANESSA": ("af_bella", 0.95),
     "DANIEL": ("bm_george", 0.85), "LEO": ("am_adam", 0.95), "MAYA": ("af_sarah", 0.95),
@@ -47,7 +48,7 @@ SEGMENTS = [
  # The handover
  ("DANIEL", "Thirty years ago, I opened one little kitchen with a borrowed oven. Today, Harlow and Daughter has three locations and a waiting list. And from Monday... my daughter Vanessa runs it.",
   [("i", "daniel_close", "DANIEL", "Founder. Aria's stepdad."), ("c", "clip03", 0.0, 4.4), ("s", "daniel_smile")]),
- ("NARR", "Daughter. Not daughters.", [("c", "clip04", 1.6, 4.4)]),
+ ("NARR", "Daughter. Not daughters.", [("f", "clip05", 0.5)]),   # Aria's thought, on Aria's face
  ("NARR", "I've been in this family since I was eleven. I've been in this kitchen since I was twenty-one. I'm still the stepdaughter who cooks.",
   [("c", "clip05", 0.2, 4.4), ("s", "aria_unbothered")]),
  ("VANESSA", "Thank you, Dad. I promise you, Harlow and Daughter is about to get a lot more... efficient.", [("f", "clip04", 4.3)]),
@@ -249,9 +250,12 @@ def main():
     seg_files, subs, t0 = [], [], 0.0
     for i, (speaker, text, visuals) in enumerate(SEGMENTS):
         voice = None
+        # a character's first appearance is a name tag over the scene, not a card that stops it
+        tags = [v for v in visuals if v[0] == "i"]
+        visuals = [v for v in visuals if v[0] != "i"]
         lip = f"{FISH}/lip_{i:02}.mp4" if FISH else ""
         if lip and speaker != "NARR" and os.path.exists(lip):
-            visuals = [v for v in visuals if v[0] == "i"] + [("L", lip)]
+            visuals = [("L", lip)]
             fish = f"{FISH}/line_{i:02}.wav"
             if os.path.exists(fish) and sf.info(fish).duration > dur(lip) + 0.8:
                 visuals.append(SPEAKER_STILL[speaker])   # cut away instead of freezing the face
@@ -259,7 +263,7 @@ def main():
             voice = f"{WORK}/v{i:02}.wav"
             fish = f"{FISH}/line_{i:02}.wav" if FISH else ""
             if fish and os.path.exists(fish):
-                fish_voice(text, fish, voice, INTRO * sum(v[0] == "i" for v in visuals))
+                fish_voice(text, fish, voice)
             elif not os.path.exists(voice + ".json"):      # resumable: reuse finished work
                 speak(speaker, text, voice)
             need = sf.info(voice).duration
@@ -300,27 +304,38 @@ def main():
                 chunks = [" ".join(words[k:k + 6]) for k in range(0, len(words), 6)]
                 for k, ch in enumerate(chunks):
                     a = t0 + a0 + (b0 - a0) * k / len(chunks); b = t0 + a0 + (b0 - a0) * (k + 1) / len(chunks)
-                    if first and speaker != "NARR":
+                    style = speaker
+                    if first and text in THOUGHTS:
+                        style = THOUGHTS[text]
+                        ch = f"{{\\b1\\i1}}{style} (thinking):{{\\b0}} " + ch
+                    elif first and speaker != "NARR":
                         ch = f"{{\\b1}}{speaker}:{{\\b0}} " + ch
                     first = False
-                    subs.append((a, b, ch, speaker))
+                    subs.append((a, b, ch, style))
         else:
             seg = body
+        for _, _, name, role in tags:
+            subs.append((t0 + 0.3, t0 + 3.8, f"{{\\an8\\pos(540,180)\\fs84\\b1}}{name}\\N{{\\fs46\\b0\\c&HFFFFFF&}}{role}", name))
         seg_files.append(seg)
         t0 += dur(seg)
         print(f"{i:02} {speaker or '-':8} {dur(seg):5.1f}s  total {t0:6.1f}s", flush=True)
     # Join picture and sound separately: each segment's AAC track runs a few ms short of its video,
     # and stream-copying the segments together lets that add up to a second of drift by the end.
     # So every segment's sound is cut or padded to exactly its video length as PCM first.
+    # The concat demuxer steps by each file's container length, so the picture is joined from
+    # video-only copies; otherwise a longer audio track would push the next segment later.
     lst, alst = f"{WORK}/all.txt", f"{WORK}/all_a.txt"
-    open(lst, "w").write("".join(f"file '{os.path.abspath(s)}'\n" for s in seg_files))
-    wavs = []
+    vids, wavs = [], []
     for k, s in enumerate(seg_files):
-        vlen = float(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=duration",
-                                     "-of", "csv=p=0", s], capture_output=True, text=True).stdout)
+        v = f"{WORK}/sv{k:02}.mp4"
+        run(["ffmpeg", "-y", "-i", s, "-an", "-c:v", "copy", v])
+        vlen = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                     "-of", "csv=p=0", v], capture_output=True, text=True).stdout)
         w = f"{WORK}/sa{k:02}.wav"
-        run(["ffmpeg", "-y", "-i", s, "-vn", "-af", f"aresample=48000,apad,atrim=0:{vlen:.6f}", "-ac", "2", "-c:a", "pcm_s16le", w])
-        wavs.append(w)
+        run(["ffmpeg", "-y", "-i", s, "-vn", "-af", f"aresample=48000,apad,atrim=end_sample={round(vlen * 48000)}",
+             "-ac", "2", "-c:a", "pcm_s16le", w])
+        vids.append(v); wavs.append(w)
+    open(lst, "w").write("".join(f"file '{os.path.abspath(v)}'\n" for v in vids))
     open(alst, "w").write("".join(f"file '{os.path.abspath(w)}'\n" for w in wavs))
     vjoin, ajoin, joined = f"{WORK}/joined_v.mp4", f"{WORK}/joined_a.wav", f"{WORK}/joined.mp4"
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-an", "-c", "copy", vjoin])
