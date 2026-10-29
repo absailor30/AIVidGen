@@ -171,13 +171,16 @@ def fish_voice(text, src, path, lead=0.0, gap=GAP):
     total_chars = sum(len(x) for x in sents)
     timing, t = [], lead
     words = json.load(open(src + ".words.json")) if os.path.exists(src + ".words.json") else []
-    if words:   # real word times (faster-whisper); map each sentence onto them by word position
+    if words:   # real word times (faster-whisper); each caption chunk (<= 6 words) gets its own times
         n_script, n_heard, k = sum(len(s.split()) for s in sents), len(words), 0
         for sent in sents:
-            a = min(int(k * n_heard / n_script), n_heard - 1)
-            k += len(sent.split())
-            b = min(max(int(k * n_heard / n_script) - 1, a), n_heard - 1)
-            timing.append((lead + words[a][0], lead + words[b][1], sent))
+            sw = sent.split()
+            for c in range(0, len(sw), 6):
+                chunk = sw[c:c + 6]
+                a = min(round(k * n_heard / n_script), n_heard - 1)
+                k += len(chunk)
+                b = min(max(round(k * n_heard / n_script) - 1, a), n_heard - 1)
+                timing.append((lead + words[a][0], lead + words[b][1], " ".join(chunk)))
     else:
         for sent in sents:
             d = speech * len(sent) / total_chars
@@ -351,7 +354,26 @@ def main():
     open(lst, "w").write("".join(f"file '{os.path.abspath(v)}'\n" for v in vids))
     open(alst, "w").write("".join(f"file '{os.path.abspath(w)}'\n" for w in wavs))
     vjoin, ajoin, joined = f"{WORK}/joined_v.mp4", f"{WORK}/joined_a.wav", f"{WORK}/joined.mp4"
-    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-an", "-c", "copy", vjoin])
+    # 0.2 s dissolve at every cut. Each shot's picture is held 0.2 s longer and the next shot fades
+    # in over that hold, starting at exactly its original time, so the sound stays in step.
+    XF = 0.2
+    lens = [float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", v],
+                                 capture_output=True, text=True).stdout) for v in vids]
+    ext = []
+    for k, v in enumerate(vids):
+        e = f"{WORK}/sx{k:02}.mp4"
+        run(["ffmpeg", "-y", "-i", v, "-vf", f"tpad=stop_mode=clone:stop_duration={XF}", *ENC[:8], "-an", e])
+        ext.append(e)
+    fc, last, off = [], "0:v", 0.0
+    for k in range(1, len(ext)):
+        off += lens[k - 1]
+        out = f"x{k}"
+        fc.append(f"[{last}][{k}:v]xfade=transition=fade:duration={XF}:offset={off:.4f}[{out}]")
+        last = out
+    fc.append(f"[{last}]trim=0:{sum(lens):.4f},setpts=PTS-STARTPTS[vout]")
+    script = f"{WORK}/xfade.txt"; open(script, "w").write(";\n".join(fc))
+    run(["ffmpeg", "-y", *sum((["-i", e] for e in ext), []), "-filter_complex_script", script,
+         "-map", "[vout]", *ENC[:8], vjoin])
     run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", alst, "-c", "copy", ajoin])
     run(["ffmpeg", "-y", "-i", vjoin, "-i", ajoin, "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-ar", "48000", joined])
     ass = f"{WORK}/subs.ass"
