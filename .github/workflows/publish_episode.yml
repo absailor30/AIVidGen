@@ -1,0 +1,65 @@
+name: Publish episode file
+
+# Publishes an already-rendered episode (e.g. The Recipe Clause) that lives in
+# the repo on some branch. Manual only: dispatched per platform, per episode.
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Branch or commit that holds the video and kit
+        required: true
+      video_path:
+        description: Path of the mp4 in that ref
+        required: true
+      kit_path:
+        description: Path of the publishing-kit JSON in that ref
+        required: true
+      platform:
+        description: youtube or instagram
+        required: true
+        type: choice
+        options: [youtube, instagram]
+      publish_at:
+        description: >-
+          YouTube only. Optional RFC3339 UTC time to go public, e.g.
+          2026-10-30T16:30:00Z. Blank publishes immediately.
+        required: false
+        default: ""
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Publish
+        env:
+          VIDEO_PATH: ${{ inputs.video_path }}
+          KIT_PATH: ${{ inputs.kit_path }}
+          PLATFORM: ${{ inputs.platform }}
+          YOUTUBE_PUBLISH_AT: ${{ inputs.publish_at }}
+          YOUTUBE_PRIVACY: "public"
+          YOUTUBE_CATEGORY_ID: "24"
+          YOUTUBE_PLAYLIST_ID: ${{ secrets.YOUTUBE_PLAYLIST_ID_LONG }}
+          GOOGLE_CLIENT_SECRET_JSON: ${{ secrets.GOOGLE_CLIENT_SECRET_JSON }}
+          GOOGLE_TOKEN_PICKLE_B64: ${{ secrets.GOOGLE_TOKEN_PICKLE_B64 }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        run: python publish_episode.py
