@@ -48,7 +48,7 @@ from generate_stories_cloud import (
 )
 
 VARIANT = "long"
-TARGET_DURATION_SECONDS = 600
+TARGET_DURATION_SECONDS = 675
 
 # Two stories per run, and the loop stops the moment the queue reaches target,
 # so this only ever costs two stories' worth of calls while the buffer is
@@ -209,12 +209,18 @@ def _beat_prompt(plan: dict, name: str, previous_tail: str, correction: str = ""
     if spec["part"] == "first":
         part_note = (
             f"\nThis is the FIRST HALF of the '{logical}' beat. Set it up and get "
-            f"it moving, but stop before its conclusion — the second half finishes it. "
+            f"it moving, but stop before its conclusion — a later part finishes it. "
             f"Do not resolve it here."
+        )
+    elif spec["part"] == "middle":
+        part_note = (
+            f"\nThis is the MIDDLE THIRD of the '{logical}' beat. The first third is "
+            f"immediately above; push it further and raise the stakes, but stop "
+            f"before its conclusion — the last third finishes it. Do not restate it."
         )
     elif spec["part"] == "second":
         part_note = (
-            f"\nThis is the SECOND HALF of the '{logical}' beat. The first half is "
+            f"\nThis is the LAST PART of the '{logical}' beat. The part before it is "
             f"immediately above; carry it forward to its conclusion. Do not restate "
             f"what it already covered."
         )

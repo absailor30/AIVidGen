@@ -7,7 +7,7 @@ is still open. Update this in place rather than adding dated copies.
 
 | Lane | Cadence | Destinations | Scheduler |
 |---|---|---|---|
-| `short` | 2x daily (from 2026-11-02) | YouTube + Instagram | Cloudflare Worker: 15:45 / 19:45 UTC (21:15 / 01:15 IST). The Worker still fires 12:45 and 17:45; `.github/skip_slots` turns those into no-ops |
+| `short` | 4x daily | YouTube + Instagram | Cloudflare Worker: 12:45 / 15:45 / 17:45 / 19:45 UTC. `.github/skip_slots` can turn a slot into a no-op (one `*THH` line per UTC hour); it is empty |
 | `cartoon` | paused (2026-11-02) | YouTube + Instagram | none: `.github/cartoon_slots` is empty. Since the hook fix cartoons had median 43 views vs 68 for stock (15 vs 43 videos) and 43% vs 48% average viewed |
 | `long` (generate) | 1x daily | Supabase queue | GitHub cron, `0 13 * * *` |
 | `long` (render) | 1x daily | YouTube only | Cloudflare Worker, `30 21 * * *` (03:00 IST) |
@@ -170,8 +170,11 @@ with prompts, TTS script and RunPod order of work.
 
 - Compare the `cartoon` and `short` lanes in `story_metrics` (hook change merged
   2026-10-15) and the hook/CTA experiment arms.
-- Theme experiment review is scheduled for 2026-11-26 (see above). Halving
-  the Shorts on 2026-11-02 cut the new themes to ~6 Shorts each by then.
+- Theme experiment review is scheduled for 2026-11-26 (see above).
+- Long-form is ~11.3 min from 2026-11-02 (owner wants every one over 10:15):
+  body beats split in thirds, total gated at 2150-2650 words. Stories already
+  queued before that are the old ~9.4 min length. Watch the first runs of
+  `story_generate_long.yml` for word-count rejections.
 - Pin `openai/gpt-oss-120b` via `/model` on the Telegram bot if not done.
 - Re-enable the `trial` lane once Instagram allows trial Reels on the account.
 - Delete the `previews` branch (it held a cloned-voice sample) and, if unused,
