@@ -17,7 +17,31 @@ on:
         default: false
 
 jobs:
+  # Slots listed in .github/skip_slots post nothing: the Worker still fires
+  # them, and this job turns that dispatch into a no-op. One line per UTC hour,
+  # e.g. *T12 for the 12:45 slot every day. Manual runs (a variant or a dry
+  # run) are never skipped.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.s.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+      - id: s
+        shell: bash
+        run: |
+          DAILY="*T$(date -u +%H)"
+          if [ -z "${{ inputs.variant }}" ] && [ "${{ inputs.dry_run }}" != "true" ] \
+             && grep -qxF "$DAILY" .github/skip_slots 2>/dev/null; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Slot $DAILY is listed in .github/skip_slots: nothing posted."
+          fi
+
   render:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write   # dry runs push the preview to the previews branch

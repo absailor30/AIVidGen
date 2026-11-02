@@ -25,6 +25,8 @@ import subprocess
 import sys
 import tempfile
 
+import cartoon_audio
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "cartoon")
 VOICE = "en-US-JennyNeural"
@@ -70,11 +72,10 @@ def synth(text: str, mp3_path: str) -> list[dict]:
 
 
 def audio_seconds(path: str) -> float:
-    out = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=nw=1:nk=1", path],
-        capture_output=True, text=True, check=True)
-    return float(out.stdout.strip())
+    """Length in seconds, read from ffmpeg's banner (ffprobe is not always installed)."""
+    err = subprocess.run(["ffmpeg", "-i", path], capture_output=True, text=True).stderr
+    h, m, sec = re.search(r"Duration: (\d+):(\d+):([\d.]+)", err).groups()
+    return int(h) * 3600 + int(m) * 60 + float(sec)
 
 
 # ---------- beats ----------
@@ -299,9 +300,7 @@ def render(story: dict, out_path: str, bgm: tuple[str, float] | None = None) -> 
 
     text = story["story"]
     words = synth(text, narration)
-    voice_len = audio_seconds(narration)
-    duration = round(voice_len + 0.8, 2)
-    print(f"[cartoon] Narration {voice_len:.1f}s, {len(words)} timed words")
+    print(f"[cartoon] Narration {audio_seconds(narration):.1f}s, {len(words)} timed words")
 
     beats = split_beats(text)
     planned = make_plan(beats)
@@ -311,6 +310,22 @@ def render(story: dict, out_path: str, bgm: tuple[str, float] | None = None) -> 
         hook["chars"][0]["mood"] = "shocked"
     if not hook.get("label"):
         hook["label"] = _clip(story.get("title"), 5)
+
+    # Open silences before the twist and the last beat (cartoon_audio).
+    turn = cartoon_audio.turn_beat(planned)
+    starts = cartoon_audio.beat_word_index(beats, len(words))
+    cuts = []
+    if turn is not None:
+        cuts.append((starts[turn], cartoon_audio.TURN_PAUSE))
+        if len(beats) - 1 > turn + 1:
+            cuts.append((starts[-1], cartoon_audio.END_PAUSE))
+    raw = os.path.join(work, "voice_raw.wav")
+    voice = os.path.join(work, "voice.wav")
+    cartoon_audio.decode(narration, raw)
+    words, pauses = cartoon_audio.insert_pauses(raw, voice, words, cuts)
+    duration = round(audio_seconds(voice) + 0.8, 2)
+    print(f"[cartoon] Turn at beat {turn}; pauses {pauses}")
+
     scenes = time_scenes(planned, beats, words, duration)
     plan = {"duration": duration, "scenes": scenes, "captions": caption_groups(words, duration)}
     with open(os.path.join(work, "plan.json"), "w") as f:
@@ -322,18 +337,11 @@ def render(story: dict, out_path: str, bgm: tuple[str, float] | None = None) -> 
     print(f"[cartoon] {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
-    inputs = ["-i", silent, "-i", narration]
+    sfx = os.path.join(work, "sfx.wav")
+    cartoon_audio.sfx_track(cartoon_audio.sfx_events(scenes, turn), duration, sfx)
     if bgm:
-        path, gain = bgm
-        gain *= BGM_SCALE
-        inputs += ["-stream_loop", "-1", "-i", path]
-        mix = (f"[2:a]volume={gain},afade=t=out:st={max(0, duration - 1.5)}:d=1.5[m];"
-               f"[1:a][m]amix=inputs=2:duration=first:normalize=0[a]")
-    else:
-        mix = "[1:a]anull[a]"
-    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", *inputs, "-filter_complex", mix,
-                    "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-                    "-t", f"{duration}", "-movflags", "+faststart", out_path], check=True)
+        bgm = (bgm[0], bgm[1] * BGM_SCALE)
+    cartoon_audio.mix(silent, voice, sfx, out_path, duration, bgm, pauses)
     print(f"[cartoon] Rendered {out_path}")
     return out_path
 
