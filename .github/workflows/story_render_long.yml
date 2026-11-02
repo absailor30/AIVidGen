@@ -22,9 +22,32 @@ on:
           the renderer handles on its own.
         required: false
         default: ""
+      force:
+        description: "Post even on an off day (long-form runs every other day)."
+        type: boolean
+        required: false
+        default: false
 
 jobs:
+  # Long-form posts every other day (owner's call, 2026-11-02). The Worker
+  # still dispatches nightly; on odd UTC epoch-days this job turns the
+  # dispatch into a no-op. A manual run with force=true always posts.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.s.outputs.skip }}
+    steps:
+      - id: s
+        shell: bash
+        run: |
+          if [ "${{ inputs.force }}" != "true" ] && [ $(( $(date -u +%s) / 86400 % 2 )) -eq 1 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Off day for long-form: nothing posted."
+          fi
+
   render:
+    needs: gate
+    if: needs.gate.outputs.skip != 'true'
     runs-on: ubuntu-latest
     env:
       PYTHONUNBUFFERED: "1"
