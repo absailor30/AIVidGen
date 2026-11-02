@@ -7,8 +7,8 @@ is still open. Update this in place rather than adding dated copies.
 
 | Lane | Cadence | Destinations | Scheduler |
 |---|---|---|---|
-| `short` | 3x daily | YouTube + Instagram | Cloudflare Worker: 12:45 / 15:45 / 19:45 UTC (18:15 / 21:15 / 01:15 IST) |
-| `cartoon` | 1x daily | YouTube + Instagram | Worker's 17:45 UTC (23:15 IST) slot, handed over by `.github/cartoon_slots` |
+| `short` | 2x daily (from 2026-11-02) | YouTube + Instagram | Cloudflare Worker: 15:45 / 19:45 UTC (21:15 / 01:15 IST). The Worker still fires 12:45 and 17:45; `.github/skip_slots` turns those into no-ops |
+| `cartoon` | paused (2026-11-02) | YouTube + Instagram | none: `.github/cartoon_slots` is empty. Since the hook fix cartoons had median 43 views vs 68 for stock (15 vs 43 videos) and 43% vs 48% average viewed |
 | `long` (generate) | 1x daily | Supabase queue | GitHub cron, `0 13 * * *` |
 | `long` (render) | 1x daily | YouTube only | Cloudflare Worker, `30 21 * * *` (03:00 IST) |
 | `trial` | paused | Instagram trial Reels | none: the account was below the follower minimum |
@@ -36,6 +36,13 @@ a keyword plan takes over when Groq is out of quota. Narration is Jenny at
 - `story_render.yml` takes `variant` and `dry_run` inputs. A dry run renders,
   posts nothing, returns the story to the queue, attaches the video to the run,
   and pushes it to the `previews` branch.
+- **Sound pass (2026-11-02), `cartoon_audio.py`.** Rules from
+  github.com/lemomo-ai/lemo-opuscar: synthesised sound effects on screen
+  actions (phone buzz, call ring, paper slap, scene whoosh, a low hit on the
+  hook and the twist), 0.8 s of silence before the twist beat and 0.5 s before
+  the last beat with the music dipped under them, voice compressed and held
+  >= 10 dB over the music, two-pass loudnorm to -14 LUFS. Only previewed by a
+  dry run; the lane is paused, so it posts nothing until a slot is handed back.
 - **A cloned voice was tried and rejected** (2026-10-10). Chatterbox (MIT)
   cloned the owner's voice from a sample in the private bucket
   (`rendered-videos/voice/`), but the result was judged far worse than Jenny.
@@ -163,7 +170,8 @@ with prompts, TTS script and RunPod order of work.
 
 - Compare the `cartoon` and `short` lanes in `story_metrics` (hook change merged
   2026-10-15) and the hook/CTA experiment arms.
-- Theme experiment review is scheduled for 2026-11-26 (see above).
+- Theme experiment review is scheduled for 2026-11-26 (see above). Halving
+  the Shorts on 2026-11-02 cut the new themes to ~6 Shorts each by then.
 - Pin `openai/gpt-oss-120b` via `/model` on the Telegram bot if not done.
 - Re-enable the `trial` lane once Instagram allows trial Reels on the account.
 - Delete the `previews` branch (it held a cloned-voice sample) and, if unused,
