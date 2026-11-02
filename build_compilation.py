@@ -43,6 +43,17 @@ THEME_PHRASE = {
 ORDINAL = ["One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"]
 
 
+CTA = re.compile(r"\b(follow|subscribe|comment|send this|share this|tell me|let me know)\b", re.I)
+
+
+def strip_cta(text: str) -> str:
+    """Drop a Short's closing call to action: one per compilation, at the end."""
+    sents = re.split(r"(?<=[.!?])\s+", text)
+    while len(sents) > 1 and CTA.search(sents[-1]):
+        sents.pop()
+    return " ".join(sents)
+
+
 def _ts(sec: float) -> str:
     sec = int(sec)
     return f"{sec // 60}:{sec % 60:02d}"
@@ -98,7 +109,7 @@ def build(theme: str, chosen: list[dict]) -> dict:
     for i, c in enumerate(chosen):
         head = f"Story {ORDINAL[i]}. {c['title']}."
         chapters.append((_ts(words_so_far / WORDS_PER_SEC), c["title"]))
-        body = re.sub(r"\s+", " ", c["story"]).strip()
+        body = strip_cta(re.sub(r"\s+", " ", c["story"]).strip())
         parts.append(f"{head}\n\n{body}")
         words_so_far += len(head.split()) + len(body.split())
     parts.append(outro)
@@ -131,6 +142,10 @@ def build(theme: str, chosen: list[dict]) -> dict:
                            "youtube_tags": [phrase.lower() + " stories", "story compilation",
                                             "reddit style stories", "family drama stories",
                                             "revenge stories", "storytime"]},
+        # render_from_supabase writes these to story_state; compilation 1
+        # uploaded fine and then failed on the missing "score" (2026-11-02).
+        "score": None,
+        "tracking_tag": f"compilation:{theme}",
         "compilation_of": [c["youtube_id"] for c in chosen],
         "source_theme": theme,
         "estimated_seconds": round(words_so_far / WORDS_PER_SEC),
