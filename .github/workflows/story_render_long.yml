@@ -22,6 +22,10 @@ on:
           the renderer handles on its own.
         required: false
         default: ""
+      theme:
+        description: "Only claim a queued story with this theme, e.g. Compilation."
+        required: false
+        default: ""
       force:
         description: "Post even on an off day (long-form runs every other day)."
         type: boolean
@@ -29,20 +33,24 @@ on:
         default: false
 
 jobs:
-  # Long-form posts every other day (owner's call, 2026-11-02). The Worker
-  # still dispatches nightly; on odd UTC epoch-days this job turns the
-  # dispatch into a no-op. A manual run with force=true always posts.
+  # Long-form posts every other day (owner's call, 2026-11-02), and not at all
+  # while .github/pause_long exists. The Worker still dispatches nightly; this
+  # job turns an off-day or paused dispatch into a no-op. A manual run with
+  # force=true always posts.
   gate:
     runs-on: ubuntu-latest
     outputs:
       skip: ${{ steps.s.outputs.skip }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
       - id: s
         shell: bash
         run: |
-          if [ "${{ inputs.force }}" != "true" ] && [ $(( $(date -u +%s) / 86400 % 2 )) -eq 1 ]; then
+          if [ "${{ inputs.force }}" != "true" ] && { [ -f .github/pause_long ] || [ $(( $(date -u +%s) / 86400 % 2 )) -eq 1 ]; }; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Off day for long-form: nothing posted."
+            echo "Off day or paused (.github/pause_long): nothing posted."
           fi
 
   render:
@@ -109,6 +117,7 @@ jobs:
           # timestamp; the video flips public on its own at that moment.
           YOUTUBE_PUBLISH_AT: ${{ inputs.publish_at }}
           YOUTUBE_CATEGORY_ID: "24"
+          QUEUE_THEME: ${{ inputs.theme }}
           # Separate playlist so long-form does not land in the Shorts playlist.
           # Falls back to no playlist if the secret is unset.
           YOUTUBE_PLAYLIST_ID: ${{ secrets.YOUTUBE_PLAYLIST_ID_LONG }}
@@ -117,7 +126,7 @@ jobs:
           # skips it unconditionally as well — a 16:9 ten-minute video is not a
           # Reel. Do not copy the short workflow's env block here.
         shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
-        run: python render_from_supabase.py 2>&1 | tee -a /tmp/pipeline.log
+        run: python render_from_supabase.py "$QUEUE_THEME" 2>&1 | tee -a /tmp/pipeline.log
 
       - name: Notify Telegram on failure
         if: failure()

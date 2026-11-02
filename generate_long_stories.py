@@ -320,8 +320,61 @@ def generate_long_story(theme: str, recent: list) -> dict:
     return story
 
 
+def extend_story(story: dict) -> dict:
+    """Bring a story written before 2026-11-02 (body beats in halves, ~9.4 min)
+    up to the current length by writing the missing middle thirds in place."""
+    plan = dict(story)
+    sections = dict(story["sections"])
+    for name in BEAT_ORDER:
+        if name in sections:
+            continue
+        before = BEAT_ORDER[BEAT_ORDER.index(name) - 1]
+        spec = LONG_BEATS[name]
+        correction, last_error = "", None
+        for attempt in range(MAX_BEAT_ATTEMPTS):
+            try:
+                result = call_groq(*_beat_prompt(plan, name, _tail(sections[before]), correction))
+                text = str(result.get("text", "")).strip()
+                n = len(text.split())
+                if not spec["min"] <= n <= spec["max"]:
+                    correction = (f"\nYour previous attempt was {n} words; return "
+                                  f"{spec['target']} words this time.")
+                    raise ValueError(f"{n} words, need {spec['min']}-{spec['max']}")
+                sections[name] = text
+                print(f"[long]   {name}: {n} words (added)")
+                break
+            except GroqQuotaExhausted:
+                raise
+            except Exception as e:
+                last_error = e
+                print(f"[long]   {name} attempt {attempt + 1} failed: {e}")
+                time.sleep(2)
+        else:
+            raise ValueError(f"beat '{name}' failed {MAX_BEAT_ATTEMPTS}x: {last_error}")
+    story = dict(story)
+    story["sections"] = sections
+    story["story"] = "\n\n".join(sections[n] for n in BEAT_ORDER)
+    story["target_duration_seconds"] = TARGET_DURATION_SECONDS
+    return story
+
+
+def extend_queued(sb, ids: list[int]):
+    for row in sb.table("story_queue").select("id,payload").in_("id", ids).execute().data:
+        story = extend_story(row["payload"])
+        validate_story(story, variant=VARIANT)
+        total = len(story["story"].split())
+        print(f"[long] Extended #{row['id']} {story['title']}: {total} words "
+              f"(~{total / 3.42:.0f}s)")
+        sb.table("story_queue").update({"payload": story, "claimed_at": None, "error": None}) \
+            .eq("id", row["id"]).execute()
+
+
 def main():
     dry_run = os.environ.get("DRY_RUN") == "1"
+    if os.environ.get("EXTEND_IDS"):
+        sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
+        extend_queued(sb, [int(x) for x in os.environ["EXTEND_IDS"].split(",")])
+        return
     sb = None if dry_run else create_client(
         os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"]
     )

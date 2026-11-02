@@ -21,7 +21,17 @@ on:
     # near 15:00. The exact hour does not matter: anything comfortably before
     # the render, with a buffer already in the queue behind it, is fine.
     - cron: "0 13 * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      extend_ids:
+        description: "Comma-separated story_queue ids of old ~9.4 min stories to extend to the current length and re-queue."
+        required: false
+        default: ""
+      compilation:
+        description: "Queue a compilation of the best-performing Shorts instead of generating a story."
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   generate:
@@ -44,15 +54,24 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # While .github/pause_long exists the scheduled run writes nothing: the
+      # auto long-form lane is paused (2026-11-02, ~10 views a video).
       - name: Top up the long story queue
+        if: github.event_name == 'workflow_dispatch' || hashFiles('.github/pause_long') == ''
         env:
+          EXTEND_IDS: ${{ inputs.extend_ids }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GROQ_MODEL: ${{ vars.GROQ_MODEL || secrets.GROQ_MODEL }}
           GROQ_MAX_TOKENS: ${{ vars.GROQ_MAX_TOKENS || secrets.GROQ_MAX_TOKENS }}
         shell: bash  # gives -o pipefail, so tee does not mask a non-zero exit
-        run: python generate_long_stories.py 2>&1 | tee -a /tmp/generate.log
+        run: |
+          if [ "${{ inputs.compilation }}" = "true" ]; then
+            python build_compilation.py 2>&1 | tee -a /tmp/generate.log
+          else
+            python generate_long_stories.py 2>&1 | tee -a /tmp/generate.log
+          fi
 
       - name: Notify Telegram on failure
         if: failure()
