@@ -181,14 +181,17 @@ LONG_BEATS = {
     # inside LONG_TOTAL_MIN..MAX.
     "hook":      {"target":  45, "min":  32, "max":  60, "brief": "hook",     "part": None},
     "lock_in":   {"target":  60, "min":  42, "max":  80, "brief": "lock_in",  "part": None},
-    "body_1a":   {"target": 163, "min": 114, "max": 212, "brief": "body_1",   "part": "first"},
-    "body_1b":   {"target": 163, "min": 114, "max": 212, "brief": "body_1",   "part": "second"},
+    "body_1a":   {"target": 160, "min": 112, "max": 208, "brief": "body_1",   "part": "first"},
+    "body_1m":   {"target": 160, "min": 112, "max": 208, "brief": "body_1",   "part": "middle"},
+    "body_1b":   {"target": 160, "min": 112, "max": 208, "brief": "body_1",   "part": "second"},
     "rehook_1":  {"target":  62, "min":  43, "max":  81, "brief": "rehook_1", "part": None},
-    "body_2a":   {"target": 163, "min": 114, "max": 212, "brief": "body_2",   "part": "first"},
-    "body_2b":   {"target": 163, "min": 114, "max": 212, "brief": "body_2",   "part": "second"},
+    "body_2a":   {"target": 160, "min": 112, "max": 208, "brief": "body_2",   "part": "first"},
+    "body_2m":   {"target": 160, "min": 112, "max": 208, "brief": "body_2",   "part": "middle"},
+    "body_2b":   {"target": 160, "min": 112, "max": 208, "brief": "body_2",   "part": "second"},
     "rehook_2":  {"target":  62, "min":  43, "max":  81, "brief": "rehook_2", "part": None},
-    "body_3a":   {"target": 163, "min": 114, "max": 212, "brief": "body_3",   "part": "first"},
-    "body_3b":   {"target": 163, "min": 114, "max": 212, "brief": "body_3",   "part": "second"},
+    "body_3a":   {"target": 160, "min": 112, "max": 208, "brief": "body_3",   "part": "first"},
+    "body_3m":   {"target": 160, "min": 112, "max": 208, "brief": "body_3",   "part": "middle"},
+    "body_3b":   {"target": 160, "min": 112, "max": 208, "brief": "body_3",   "part": "second"},
     "rehook_3":  {"target":  62, "min":  43, "max":  81, "brief": "rehook_3", "part": None},
     "truth_a":   {"target":  98, "min":  69, "max": 127, "brief": "truth",    "part": "first"},
     "truth_b":   {"target":  97, "min":  68, "max": 126, "brief": "truth",    "part": "second"},
@@ -204,9 +207,11 @@ BEAT_ORDER = list(LONG_BEATS)
 LOGICAL_BEATS = ["hook", "lock_in", "body_1", "rehook_1", "body_2", "rehook_2",
                  "body_3", "rehook_3", "truth", "closing", "cta"]
 
-# Targets total 1938 words (~9.4 min), under the 10-minute ceiling. Per-beat
-# bands alone would allow 6.6-12.3 min, so gate the aggregate too.
-LONG_TOTAL_MIN, LONG_TOTAL_MAX = 1650, 2150
+# Targets total 2313 words (~11.3 min at 3.42 w/s). The owner wants every
+# long-form video over 10:15 (2026-11-02), so the floor is 2150 words (~10.5
+# min) and the body beats are in thirds rather than halves: each request stays
+# near 160 words, inside the range the model reliably hits (see above).
+LONG_TOTAL_MIN, LONG_TOTAL_MAX = 2150, 2650
 LONG_MIN_KEYWORD_TERMS = 10
 
 AUTOMATION_TAIL = """
