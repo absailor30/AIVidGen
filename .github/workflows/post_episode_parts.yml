@@ -1,0 +1,43 @@
+name: Twisty! StoryVault — post episode parts as Shorts
+
+# Manual only. Uploads a character episode that has already been cut into
+# Shorts (files on the branch its manifest names) as scheduled YouTube posts,
+# one part a day. See post_episode_parts.py.
+on:
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: "Manifest in episodes/, e.g. episodes/recipe_clause_ep1.json"
+        required: true
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Fetch the part files
+        env:
+          MANIFEST: ${{ inputs.manifest }}
+        run: |
+          REF=$(python -c "import json,os;print(json.load(open(os.environ['MANIFEST']))['files_ref'])")
+          DIR=$(python -c "import json,os;print(json.load(open(os.environ['MANIFEST']))['files_dir'])")
+          git fetch --depth=1 origin "$REF"
+          mkdir -p /tmp/parts
+          for f in $(git ls-tree --name-only FETCH_HEAD "$DIR/"); do git show "FETCH_HEAD:$f" > "/tmp/parts/$(basename "$f")"; done
+          ls -la /tmp/parts
+      - name: Upload, scheduled one a day
+        env:
+          MANIFEST: ${{ inputs.manifest }}
+          GOOGLE_TOKEN_PICKLE_B64: ${{ secrets.GOOGLE_TOKEN_PICKLE_B64 }}
+          YOUTUBE_PRIVACY: "public"
+          YOUTUBE_CATEGORY_ID: "24"
+          YOUTUBE_PLAYLIST_ID: ${{ secrets.YOUTUBE_PLAYLIST_ID }}
+        run: python post_episode_parts.py "$MANIFEST" /tmp/parts

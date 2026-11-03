@@ -166,6 +166,18 @@ with prompts, TTS script and RunPod order of work.
   Only its README was read; next step was to read `DIRECTOR.md` and
   `TECHNIQUE.md` and borrow what helps.
 
+## Character episodes as Shorts (2026-11-03)
+
+"The Recipe Clause" episode 1 (made in another session on RunPod; source on
+branch `claude/short-story-tier-4-aividgen-6ow70v`,
+`experiments/character_video/`) was posted whole as a 5:16 Short-format video
+and got single-digit views. It is re-cut into five ~1 min parts (cuts at
+dialogue pauses, "PART n/5" label for 4 s, "PART n+1 TOMORROW" for the last
+3 s), stored on the `previews` branch under `episodes/recipe_clause_ep1/`, and
+uploaded by `post_episode_parts.yml` with manifest
+`episodes/recipe_clause_ep1.json`: one part public per day at 14:15 UTC from
+2026-11-04. This runs alongside the four daily Shorts.
+
 ## Open items
 
 - Compare the `cartoon` and `short` lanes in `story_metrics` (hook change merged
