@@ -10,7 +10,7 @@ import json, os, subprocess, sys
 import numpy as np, soundfile as sf
 
 GROK = os.environ.get("GROK", "grok2")
-LIP = os.environ.get("LIP", "lip2")
+LIP = os.environ.get("LIP", "lip3:lip2").split(":")   # first folder that has the clip wins
 VOICES = os.environ.get("VOICES", "ep2v3")
 WORK = os.environ.get("WORK", "work_p2")
 OUT = os.environ.get("OUT", "recipe_clause_ep2.mp4")
@@ -51,8 +51,8 @@ PLAN = {
     3: [("L", 3)],
     4: [("L", 4)],
     5: [("c", "shot_04", 6.0)],
-    6: [("L", 6)],
-    7: [("c", "shot_05", 5.5)],
+    6: [("c", "shot_05", 0.0, 1.2), ("L", 6)],          # wide as Maya walks in, then her close-up
+    7: [("L", 7)],
     8: [("c", "shot_06", 0.0, 3.0), ("L", 8)],
     9: [("L", 9)], 10: [("L", 10)], 11: [("L", 11)], 12: [("L", 12)], 13: [("L", 13)],
     14: [("c", "shot_09", 0.0)],
@@ -66,6 +66,10 @@ PLAN = {
 FREEZE_AFTER = {11: 0.7, 13: 0.7, 22: 0.8}            # punchline freezes
 TITLE_AFTER = {0: ("THE RECIPE CLAUSE", "PART 2: THE CRITIC'S TABLE", 2.6)}
 END_SECS = 3.0
+
+
+def lip(n):
+    return next(f"{d}/lip_{n:02}.mp4" for d in LIP + [LIP[-1]] if os.path.exists(f"{d}/lip_{n:02}.mp4") or d == LIP[-1])
 
 
 def run(cmd):
@@ -215,7 +219,7 @@ def main():
         total = lead + vsec + GAP
         lips = [v for v in plan if v[0] == "L"]
         if lips and len(lips[0]) == 2:   # a lip clip carries the line: its own length sets the minimum
-            total = max(total, pre + dur(f"{LIP}/lip_{lips[0][1]:02}.mp4"))
+            total = max(total, pre + dur(lip(lips[0][1])))
         nseg = frames(total)
         total = nseg / FPS
         # picture
@@ -229,7 +233,7 @@ def main():
                 sec = v[3] if (len(v) > 3 and v[3] and not last) else left / FPS
                 used += vclip(f"{GROK}/{v[1]}.mp4", v[2], sec, p, speed, fade_in=(k == 0 and n in SCENE_START))
             else:
-                src = f"{LIP}/lip_{v[1]:02}.mp4"
+                src = lip(v[1])
                 sec = v[2] if len(v) > 2 else (left / FPS if last else dur(src))
                 used += vclip(src, 0.0, sec, p, fade_in=(k == 0 and n in SCENE_START))
             parts.append(p)
