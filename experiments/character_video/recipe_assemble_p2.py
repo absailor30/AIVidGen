@@ -66,6 +66,7 @@ PLAN = {
 FREEZE_AFTER = {11: 0.7, 13: 0.7, 22: 0.8}            # punchline freezes
 TITLE_AFTER = {0: ("THE RECIPE CLAUSE", "PART 2: THE CRITIC'S TABLE", 2.6)}
 END_SECS = 3.0
+SKIP = {14, 15, 16, 17}        # back-lot scene with Leo cut: Aria goes straight from the pass to the drive
 
 
 def lip(n):
@@ -203,6 +204,8 @@ def main():
         vocal.append(voice_only if voice_only is not None else np.zeros(len(arr), "float32"))
 
     for n, (sp, _, text) in enumerate(LINES):
+        if n in SKIP:
+            continue
         voice, _ = sf.read(f"{VOICES}/line_{n:02}.wav", dtype="float32")
         words = json.load(open(f"{VOICES}/line_{n:02}.wav.words.json"))
         vsec = len(voice) / SR
