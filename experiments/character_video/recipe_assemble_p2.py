@@ -19,6 +19,10 @@ W, H, FPS, SR = 1080, 1920, 25, 48000
 GAP, LEAD = 0.35, 0.6          # pause after a line; pause before the first line of a new scene
 BED_VOL = 0.18                 # scene room sound under the voices
 PART, NEXT = 2, 3
+MUSIC = [m for m in os.environ.get("MUSIC", "").split(":") if m]   # track A (main), optional track B
+MUSIC_B_FROM = 19              # track B takes over at this line (the garage reveal)
+MUSIC_VOL, DUCK = 0.16, 0.55   # music level, and how much it dips under speech
+WM_BOX = (940, 1840, 135, 72)  # x, y, w, h of the Grok watermark in the 1080x1920 frame
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from recipe_clause_parts2_4 import PARTS
@@ -151,13 +155,36 @@ def bed(shot, n_samples):
     return np.tile(a, reps)[:n_samples] * BED_VOL
 
 
+def load_music(path, n):
+    tmp = f"{WORK}/music_{os.path.basename(path)}.wav"
+    run(["ffmpeg", "-y", "-v", "error", "-i", path, "-ac", "1", "-ar", str(SR), tmp])
+    m, _ = sf.read(tmp, dtype="float32")
+    m = m / max(1e-6, np.sqrt(np.mean(m ** 2))) * 0.1          # even out loudness between tracks
+    return np.tile(m, int(np.ceil(n / len(m))))[:n]
+
+
+def music_bed(n, vocal, b_at):
+    """Track A, crossfading to track B at `b_at`; ducked under speech; fades out at the very end."""
+    a = load_music(MUSIC[0], n)
+    if len(MUSIC) > 1 and b_at < n:
+        b = np.zeros(n, "float32"); b[b_at:] = load_music(MUSIC[1], n - b_at)
+        xf = int(2.0 * SR); ramp = np.clip((np.arange(n) - b_at + xf // 2) / xf, 0, 1).astype("float32")
+        a = a * (1 - ramp) + b * ramp
+    env = np.abs(vocal)
+    k = int(0.25 * SR); env = np.convolve(env, np.ones(k, "float32") / k, mode="same")
+    env = np.clip(env / 0.02, 0, 1)
+    gain = MUSIC_VOL * (1 - DUCK * env)
+    fade = int(1.5 * SR); gain[-fade:] *= np.linspace(1, 0, fade)
+    return a * gain
+
+
 def ass_time(x):
     return f"{int(x // 3600)}:{int(x % 3600 // 60):02}:{x % 60:05.2f}"
 
 
 def main():
     os.makedirs(WORK, exist_ok=True)
-    vids, audio, subs = [], [], []
+    vids, audio, subs, vocal, marks = [], [], [], [], {}
     t_frames = 0
     scene_of = {}
     cur = None
@@ -167,8 +194,9 @@ def main():
                 cur = shot
         scene_of[n] = cur
 
-    def add_audio(arr):
+    def add_audio(arr, voice_only=None):
         audio.append(arr)
+        vocal.append(voice_only if voice_only is not None else np.zeros(len(arr), "float32"))
 
     for n, (sp, _, text) in enumerate(LINES):
         voice, _ = sf.read(f"{VOICES}/line_{n:02}.wav", dtype="float32")
@@ -212,7 +240,9 @@ def main():
         mix = bed(scene_of[n], ns)
         s0 = round(lead * SR)
         mix[s0:s0 + len(voice)] += voice[:ns - s0]
-        add_audio(mix)
+        vo = np.zeros(ns, "float32"); vo[s0:s0 + len(voice)] = voice[:ns - s0]
+        marks[n] = sum(len(x) for x in audio)
+        add_audio(mix, vo)
         # subtitles: the script's words in 6-word chunks, timed from the heard words (mapped by position)
         t0 = t_frames / FPS + lead
         sw, nh = text.split(), len(words)
@@ -254,6 +284,8 @@ def main():
     vjoin = f"{WORK}/joined_v.mp4"
     run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", vjoin])
     a = np.concatenate(audio)
+    if MUSIC:
+        a = a + music_bed(len(a), np.concatenate(vocal), marks.get(MUSIC_B_FROM, len(a)))
     a = a / max(1.0, np.abs(a).max() / 0.95)
     sf.write(f"{WORK}/joined_a.wav", np.stack([a, a], 1), SR)
     # subtitles
@@ -265,7 +297,8 @@ def main():
     head += "\n[Events]\nFormat: Layer, Start, End, Style, Text\n"
     ass = f"{WORK}/subs.ass"
     open(ass, "w").write(head + "".join(f"Dialogue: 0,{ass_time(a0)},{ass_time(b0)},{sp},{c}\n" for a0, b0, c, sp in subs))
-    run(["ffmpeg", "-y", "-v", "error", "-i", vjoin, "-i", f"{WORK}/joined_a.wav", "-vf", f"subtitles={ass}",
+    run(["ffmpeg", "-y", "-v", "error", "-i", vjoin, "-i", f"{WORK}/joined_a.wav", "-vf",
+         f"split[m][c];[c]crop={WM_BOX[2]}:{WM_BOX[3]}:{WM_BOX[0]}:{WM_BOX[1]},boxblur=12:3[b];[m][b]overlay={WM_BOX[0]}:{WM_BOX[1]},subtitles={ass}",
          "-map", "0:v", "-map", "1:a", "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-b:a", "192k", "-ar", str(SR), "-shortest", OUT])
     print("wrote", OUT, f"{dur(OUT):.1f}s  (picture {t_frames / FPS:.1f}s, sound {len(a) / SR:.1f}s)")
