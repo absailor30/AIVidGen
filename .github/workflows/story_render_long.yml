@@ -31,6 +31,26 @@ on:
         type: boolean
         required: false
         default: false
+      compilation_themes:
+        description: >-
+          Hour-long compilation instead of the queued story: themes joined
+          with |, e.g. "Wedding & Family Entitlement|Bridesmaid & Wedding
+          Party Drama". Rendered story by story in parallel, then stitched.
+        required: false
+        default: ""
+      compilation_minutes:
+        description: "Compilation length to aim for, in minutes."
+        required: false
+        default: "63"
+      compilation_queue_id:
+        description: "Re-render an existing compilation row instead of building a new one."
+        required: false
+        default: ""
+      dry_run:
+        description: "Compilation only: stitch and attach the video to the run, upload nothing."
+        type: boolean
+        required: false
+        default: false
 
 jobs:
   # Long-form posts every other day (owner's call, 2026-11-02), and not at all
@@ -55,7 +75,7 @@ jobs:
 
   render:
     needs: gate
-    if: needs.gate.outputs.skip != 'true'
+    if: needs.gate.outputs.skip != 'true' && inputs.compilation_themes == '' && inputs.compilation_queue_id == ''
     runs-on: ubuntu-latest
     env:
       PYTHONUNBUFFERED: "1"
@@ -142,3 +162,120 @@ jobs:
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             --data-urlencode text="$MSG" > /dev/null
+
+  # --- Hour-long compilation -------------------------------------------------
+  # Manual only (compilation_themes or compilation_queue_id). One pass cannot
+  # render an hour: an 11 min video takes 30-60 min here. build_compilation.py
+  # stores one narration per story; four runners render them in parallel and
+  # comp_publish joins the pieces without re-encoding.
+  comp_build:
+    if: inputs.compilation_themes != '' || inputs.compilation_queue_id != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      queue_id: ${{ steps.q.outputs.queue_id }}
+    env:
+      PYTHONUNBUFFERED: "1"
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - name: Check the channel may upload over 15 minutes
+        if: ${{ !inputs.dry_run }}
+        env:
+          GOOGLE_TOKEN_PICKLE_B64: ${{ secrets.GOOGLE_TOKEN_PICKLE_B64 }}
+        run: python render_compilation.py preflight
+      - name: Pick the stories
+        id: q
+        env:
+          THEME: ${{ inputs.compilation_themes }}
+          TARGET_MINUTES: ${{ inputs.compilation_minutes }}
+          EXISTING: ${{ inputs.compilation_queue_id }}
+        shell: bash
+        run: |
+          if [ -n "$EXISTING" ]; then
+            echo "queue_id=$EXISTING" >> "$GITHUB_OUTPUT"
+          else
+            python build_compilation.py
+          fi
+
+  comp_render:
+    needs: comp_build
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    env:
+      PYTHONUNBUFFERED: "1"
+      STORY_VARIANT: "long"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install -r requirements.txt
+      - name: Render this shard's stories
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          QUEUE_ID: ${{ needs.comp_build.outputs.queue_id }}
+          SHARD: ${{ matrix.shard }}
+          SHARDS: "4"
+        run: python render_compilation.py segments
+      - uses: actions/upload-artifact@v4
+        with:
+          name: segments-${{ matrix.shard }}
+          path: segments/*.mp4
+          retention-days: 2
+          compression-level: 0
+
+  comp_publish:
+    needs: [comp_build, comp_render]
+    if: ${{ !cancelled() && needs.comp_build.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONUNBUFFERED: "1"
+      STORY_VARIANT: "long"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: segments-*
+          path: segments
+          merge-multiple: true
+      - name: Stitch + upload
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GOOGLE_TOKEN_PICKLE_B64: ${{ secrets.GOOGLE_TOKEN_PICKLE_B64 }}
+          YOUTUBE_PRIVACY: "public"
+          YOUTUBE_PUBLISH_AT: ${{ inputs.publish_at }}
+          YOUTUBE_CATEGORY_ID: "24"
+          YOUTUBE_PLAYLIST_ID: ${{ secrets.YOUTUBE_PLAYLIST_ID_LONG }}
+          QUEUE_ID: ${{ needs.comp_build.outputs.queue_id }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+        shell: bash
+        run: python render_compilation.py publish 2>&1 | tee -a /tmp/pipeline.log
+      - uses: actions/upload-artifact@v4
+        if: ${{ inputs.dry_run }}
+        with:
+          name: compilation
+          path: segments/final.mp4
+          retention-days: 2
+          compression-level: 0
