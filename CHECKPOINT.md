@@ -120,6 +120,46 @@ Where it is heading (budget: $20/month, one story a day):
   pick it up). The environment's network allowlist now includes the Runpod
   docs, API and MCP hosts and huggingface.co.
 
+## The Recipe Clause (4-part drama, Twisty! StoryVault) — state as of 2026-11-12
+
+Branch: `claude/short-story-tier-4-aividgen-6ow70v`. Never push to `main`; no PRs unless asked.
+Standing rules: pods ≤ $1/hr, stop them when done and monitor them; secrets only via the
+credential form, never in chat; commit and push repo changes.
+
+- **Part 1** published earlier (`publish/recipe_clause_ep1.*`).
+- **Part 2 done and scheduled.** Published as a **YouTube Short** https://youtu.be/H_frceW-DnI,
+  public **Fri 13 Nov 2026 22:00 IST (16:30 UTC)**. Cut: 2:00, back-lot "garage" scene (lines 14-17)
+  removed, Grok watermark blurred, music "Cold Plated" + "Letters Under Seal", yellow Anton
+  "TO BE CONTINUED / FOLLOW FOR / PART 3" end card (wanted on every episode). Files:
+  `experiments/character_video/publish/` (mp4, 16:9 thumb, `recipe_clause_ep2_thumb_9x16.jpg`, json kit).
+  Still the user's job: pick the Shorts cover frame in the YouTube app; check playlist placement.
+- **Voices locked (v4)** in `voices/part2/` (Fish Drama 3 "Fish B": temp 0.95, top_k 50, top_p 0.95;
+  take picks and speed changes in that README). Assembler: `recipe_assemble_p2.py` (env vars GROK, LIP,
+  VOICES, MUSIC, WORK, OUT, FONT). Publish via `publish_episode.yml` (needs a full SHA, not a short one).
+- **Lip-sync lesson.** InfiniteTalk animates every face in frame; use single-face crop close-ups
+  (approved). LatentSync 1.6 tested and rejected as "fake". Pipeline: faster-whisper timings, afftdn,
+  room IR reverb 0.18, loudnorm -21 LUFS, 160-180 wpm.
+- **Open experiment 1 - Aria voice clone.** User preferred Grok's own Aria voice but Grok is expensive.
+  `gtest/aria_grok_ref.wav` (7.6 s) is the reference. The Fish clone test on the user's pod
+  `7c012nczdwf71v` **failed: all 12 takes `AttributeError in __init__.py:397`**. Pod is stopped (EXITED,
+  $0.82/hr; delete it if no longer needed). Next: restart it, read WanGP's log for the full traceback, fix,
+  re-run `clone_test.py`. **Alternative that already works:** Qwen3-TTS Space
+  (huggingface.co/spaces/Qwen/Qwen3-TTS) Voice Clone with that reference gave a clean take with every word
+  intact; speaker similarity vs Grok 0.78 (ours 0.75), pace ~146 wpm (needs speeding to 160-180). User to
+  judge by ear. Open decision: new Aria voice from Part 3 only, or redo Part 2 (re-voice, re-lip-sync,
+  re-render, re-upload).
+- **Open experiment 2 - cheap video from stills.** HF Space `zerogpu-aoti/wan2-2-fp8da-aoti-faster`
+  (Wan 2.2 I2V 14B Lightning, user is on PRO). Findings: face identity holds, even in two-person shots;
+  16 fps native, interpolation gives 32 fps; Frame Upscale Factor 2 gives 960x1664 and is clearly sharper;
+  negative prompt only works if Guidance Scale > 1; expression overshoots (slight smile became a grin)
+  and the model invents mouth movement with no audio; first+last-frame mode works but drifts from the
+  last frame when start and end framing differ a lot (studio-grey first frame morphed into the kitchen).
+  Verdict so far: fine for silent filler (walk-ins, reactions, b-roll), not for acting or dialogue; talking
+  shots still need Grok + InfiniteTalk. Script `experiments/character_video/wan22_i2v_test.py` is for the
+  RunPod WanGP route and is untested (model id / profile names are guesses); the user is using the Space UI.
+  Next: matching kitchen mid-shot as first frame, closer end frame.
+- **Not here:** the chatbot/companion-app idea moves to a separate chat.
+
 ## Open items
 
 - Drop the dead `GOOGLE_CLIENT_SECRET_JSON` references from both workflows.
