@@ -33,3 +33,40 @@ Credit order if limits run out: 3, 7, 4, 5, 8, 2, 9, 10, 6.
 ## Open before voicing
 - Part 3 script is only 14 lines (~75 s). Part 2 was 2:00. Consider 4-6 extra lines or a closing hook.
 - Voice engine for Aria: Fish v4 (locked, used in Part 2) vs Qwen3-TTS clone of the Grok reference.
+
+---
+# Grok-voice route (decided 2026-11-13): Grok speaks the lines itself
+
+One clip **per speaking turn**, one person speaking, the other silent or off-frame, so each clip's audio is
+one clean voice. We cut between clips; no InfiniteTalk lip-sync, no Fish. Start image = that character's
+cast still in the right set (Grok derives the voice from the face, so use the **same still every time**).
+
+Prompt template (paste, fill the bracket):
+`[Shot description, one person on camera, close-up, static camera]. The woman speaks this line in one take, clearly, [voice]: "[LINE]". She stops speaking and holds the look for a second. No music, no other voices, no other dialogue.`
+
+Voice tags (keep identical every time): ARIA `calm, dry, low-mid pitch, controlled, never raises her voice`;
+VANESSA `smug, sharp, clipped, polished, slightly nasal`; DANIEL (man) `warm, deep, slight gravel, measured, tired`.
+
+| Clip | Line # | On camera | Line (exact) |
+|---|---|---|---|
+| g01 | 2 | Vanessa, kitchen, holding a letter | What is this? |
+| g02 | 3 | Aria, kitchen pass | It's a letter. Clause fourteen. You should read it. All of it, this time. |
+| g03 | 4 | Vanessa | This is ridiculous. You can't own a short rib. |
+| g04 | 5 | Aria | I don't own the cow. I own the recipe. And as of Monday, you're not licensed to serve it. |
+| g05 | 6 | Vanessa | I'll call our lawyers. |
+| g06 | 7 | Aria | Please do. Ask them about clause fourteen. Dad wrote it. He's very good at contracts. |
+| g07 | 9 | Daniel, dining head of table | Sit down. Both of you. |
+| g08 | 10 | Vanessa, dining | She is holding the business hostage! |
+| g09 | 11 | Daniel | No, Vanessa. You cut her pay to lease a car, and you forgot to read what you were cutting. That's not a hostage. That's a receipt. |
+| g10 | 12 | Vanessa | You're taking her side? |
+| g11 | 13 | Daniel | I'm taking the contract's side. I wrote it for exactly this. I just hoped I'd never need it. |
+
+Narrator lines (0, 1, 8 and any closing hook) stay on the locked Fish narrator so Parts 1-3 match.
+Plus the silent b-roll shots (2, 3, 6, 7, 10 above) for cutaways.
+
+Then I will: extract each clip's audio, check the words with Whisper (reject a take that changed the
+wording), trim silence, speed to 160-180 wpm, and assemble with the Part 2 assembler (Grok audio in place
+of the Fish lines, no lip-sync pass).
+
+Check first: generate g02 and g09 and see whether Aria and Daniel sound the same in two different clips.
+If a character's voice drifts between clips, we fix it by cloning one good take, not by re-rolling.
