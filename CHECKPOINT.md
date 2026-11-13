@@ -178,6 +178,29 @@ uploaded by `post_episode_parts.yml` with manifest
 `episodes/recipe_clause_ep1.json`: one part public per day at 14:15 UTC from
 2026-11-04. This runs alongside the four daily Shorts.
 
+## Hour-long compilation (2026-11-12)
+
+`build_compilation.py` with `TARGET_MINUTES` (themes joined with `|`) stores one
+narration per story in `payload.segments` and inserts the row already claimed.
+`story_render_long.yml` inputs `compilation_themes` / `compilation_minutes` /
+`compilation_queue_id` / `dry_run` run `render_compilation.py`: four runners
+render the stories in parallel, the pieces are joined without re-encoding,
+chapters come from the real durations, the thumbnail reads "1 HOUR ...".
+**Only on branch `claude/dreamy-bohr-59ihfs`**; dispatch the workflow from that
+ref until it is merged. First run (#78): 39/39 stories, 1:02:28, 1.5 GB, about
+90 min of wall time, queue row 483, YouTube `iguFYckBaow`, scheduled public
+2026-11-13 14:30 UTC. Judge it at day 3 against the long-form median of ~10
+views and the first compilation's 3.
+
+Theme read on 2026-11-12 (median day-3 views, Shorts): Bridesmaid 296, Wedding
+& Family Entitlement 257, In-Law 180, Marriage 130, Holiday Dinner 122, Sibling
+104, Friendship 100, Inheritance 70, Career 60, Neighbour 38, Family Money 27.
+The Recipe Clause ep 1 uploads: median 18.
+
+The Recipe Clause Part 3: script (cold open added), shot list and publishing
+kit are in `experiments/character_video/` on this branch; Parts 2-4 lines and
+the Part 2 video are on `claude/short-story-tier-4-aividgen-6ow70v`.
+
 ## Open items
 
 - Compare the `cartoon` and `short` lanes in `story_metrics` (hook change merged
