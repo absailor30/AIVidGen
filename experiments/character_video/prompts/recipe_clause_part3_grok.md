@@ -70,3 +70,38 @@ of the Fish lines, no lip-sync pass).
 
 Check first: generate g02 and g09 and see whether Aria and Daniel sound the same in two different clips.
 If a character's voice drifts between clips, we fix it by cloning one good take, not by re-rolling.
+
+---
+# Dialogue coverage: over-the-shoulder (OTS) shot / reverse shot  (added 2026-11-17)
+
+Replaces the plain close-ups. Every talking clip is an OTS: **speaker's face fills the frame, facing camera;
+the listener is only a soft, out-of-focus shoulder + back of head in the foreground** (left or right edge).
+Cut A-over-B, B-over-A. Always pair them: same room, same light, same lens look, and **the listener's
+shoulder sits on the same side in every shot of the pair** (speaker 1 on camera-right with listener on
+left; the reverse shot flips it). Subtitles (6-word chunks, bottom third) stay as in Part 2.
+
+## Step 1 - make the OTS stills (Flow / Grok Imagine image), not the video
+Start images matter more than the video prompt. Generate both stills of a pair from the same master, one after the other.
+
+Still template:
+`Over-the-shoulder shot, vertical 9:16. In the foreground, out of focus, the [LISTENER: hair/clothes] seen from behind on the [left/right] edge of frame, only a shoulder and the back of the head. In sharp focus, the [SPEAKER description], face towards camera, [expression], [set]. Shallow depth of field, soft key light, realistic film look. No text.`
+
+| Pair | Set | Still A (speaker, listener in foreground) | Still B (reverse) |
+|---|---|---|---|
+| P1 | kitchen pass | ARIA on camera, over VANESSA's shoulder (blonde hair, black blazer, left edge) | VANESSA on camera, over ARIA's shoulder (dark ponytail, white shirt, right edge) |
+| P2 | dining | DANIEL on camera (head of table), over VANESSA's shoulder | VANESSA on camera, over DANIEL's shoulder |
+| P3 | dining | ARIA on camera, over DANIEL's shoulder | DANIEL on camera, over ARIA's shoulder (optional, for the quiet beat) |
+
+## Step 2 - video prompt per clip (from the still, 6-10 s)
+`Keep the over-the-shoulder framing exactly. The speaker says, in one take: "[LINE]". The foreground shoulder stays almost still, only a slight breath. Subtle camera drift, no cut, no zoom. No music, no other voices.`
+
+## Line -> clip map (replaces g01-g11 stills; text identical)
+| Clip | Line | Still |
+|---|---|---|
+| g01, g03, g05 | 2, 4, 6 (Vanessa) | P1-B |
+| g02, g04, g06 | 3, 5, 7 (Aria) | P1-A |
+| g07, g09, g11 | 9, 11, 13 (Daniel) | P2-A |
+| g08, g10 | 10, 12 (Vanessa) | P2-B |
+
+Cost note: one still pair reused for 3 clips each, so only **4 OTS stills** are needed for Part 3.
+Add a wide master (existing shot 3 / 7) once at the start of each scene, and cutaway b-roll between.
