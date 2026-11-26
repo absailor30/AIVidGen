@@ -166,6 +166,15 @@ with prompts, TTS script and RunPod order of work.
   Only its README was read; next step was to read `DIRECTOR.md` and
   `TECHNIQUE.md` and borrow what helps.
 
+## Theme review (2026-11-26)
+
+The 30-day experiment ended: weights in `THEME_WEIGHTS` were re-derived from
+median day-3 views (In-Law 3, Bridesmaid 3, Holiday Dinner 2, Wedding 2,
+Marriage / Friendship / Family Money / Neighbour 1). Career Sabotage, Family
+Inheritance and Sibling Rivalry were cut (lowest reach, no subscribers).
+Re-check around 2026-12-26. Recipe Clause ep1 parts ended at 21/24/22/19/35
+views: viewers came back, but reach is a fraction of a stock Short.
+
 ## Character episodes as Shorts (2026-11-03)
 
 "The Recipe Clause" episode 1 (made in another session on RunPod; source on
