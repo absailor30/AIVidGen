@@ -7,7 +7,7 @@ is still open. Update this in place rather than adding dated copies.
 
 | Lane | Cadence | Destinations | Scheduler |
 |---|---|---|---|
-| `short` | 4x daily | YouTube + Instagram | Cloudflare Worker: 12:45 / 15:45 / 17:45 / 19:45 UTC. `.github/skip_slots` can turn a slot into a no-op (one `*THH` line per UTC hour); it is empty |
+| `short` | 1x daily (from 2026-11-26) | YouTube + Instagram | 15:45 UTC (21:15 IST). The Worker still fires 12:45 / 17:45 / 19:45; `.github/skip_slots` turns those into no-ops |
 | `cartoon` | paused (2026-11-02) | YouTube + Instagram | none: `.github/cartoon_slots` is empty. Since the hook fix cartoons had median 43 views vs 68 for stock (15 vs 43 videos) and 43% vs 48% average viewed |
 | `long` (generate) | paused with the render (scheduled run writes nothing while `.github/pause_long` exists) | Supabase queue | GitHub cron, `0 13 * * *` |
 | `long` (render) | **paused** (2026-11-02) while `.github/pause_long` exists; otherwise every other day | YouTube only | Cloudflare Worker, `30 21 * * *` (03:00 IST) fires nightly; the `gate` job in `story_render_long.yml` skips odd UTC epoch-days. A manual run with `force` always posts |
@@ -172,7 +172,8 @@ The 30-day experiment ended: weights in `THEME_WEIGHTS` were re-derived from
 median day-3 views (In-Law 3, Bridesmaid 3, Holiday Dinner 2, Wedding 2,
 Marriage / Friendship / Family Money / Neighbour 1). Career Sabotage, Family
 Inheritance and Sibling Rivalry were cut (lowest reach, no subscribers).
-Re-check around 2026-12-26. Recipe Clause ep1 parts ended at 21/24/22/19/35
+Same day the owner cut to the top three only (In-Law 3, Bridesmaid 3,
+Holiday Dinner 2) and to one Short a day. Re-check around 2026-12-26. Recipe Clause ep1 parts ended at 21/24/22/19/35
 views: viewers came back, but reach is a fraction of a stock Short.
 
 ## Character episodes as Shorts (2026-11-03)

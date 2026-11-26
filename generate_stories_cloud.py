@@ -132,15 +132,11 @@ satisfying, karmic vindication where the narrator comes out on top."""
 # Sibling 30, Marriage 25 (but avg 83: occasional breakouts), Career 19,
 # Inheritance 8. Career, Inheritance and Sibling had no subscribers and are
 # cut. 5-17 Shorts per theme, so re-check after another month.
+# Owner's call 2026-11-26: only the top three themes from the review above.
 THEME_WEIGHTS = {
     "In-Law Conflicts": 3,
     "Bridesmaid & Wedding Party Drama": 3,
     "Holiday Dinner Blow-Up": 2,
-    "Wedding & Family Entitlement": 2,
-    "Marriage & Infidelity": 1,
-    "Friendship Betrayal & Glow-Up": 1,
-    "Family Money & Borrowed Cash": 1,
-    "Neighbour & Roommate Conflicts": 1,
 }
 
 THEMES = list(THEME_WEIGHTS)
