@@ -176,6 +176,23 @@ Same day the owner cut to the top three only (In-Law 3, Bridesmaid 3,
 Holiday Dinner 2) and to one Short a day. Re-check around 2026-12-26. Recipe Clause ep1 parts ended at 21/24/22/19/35
 views: viewers came back, but reach is a fraction of a stock Short.
 
+## AI-only stories (planned 2026-11-26)
+
+Owner wants every story fully AI-made on RunPod (no stock footage), written by
+us, clips generated on the pod, voiced and stitched. No Flow or Grok: the
+character refs are on the RunPod volume (`/workspace`), and stills are made on
+the pod too. Pilot #1 script and over-the-shoulder shot list:
+`experiments/ai_story/the_last_chair.md` (In-Law at Thanksgiving; cast roles
+are renamed to fit whichever refs are on the volume). Blocked on pod access:
+either the owner starts the pod with
+`bash /workspace/start.sh --mcp-webui --mcp-port 8000 --mcp-allow-read-file-system`
+plus `tunnel_mcp.sh` and sends the trycloudflare URL, or a RunPod API key is
+added as a network secret for host `rest.runpod.io` (Bearer) in the cloud
+environment's settings, so Claude can start/stop pods itself. Prior pod work
+and its lessons: branch `claude/short-story-tier-4-aividgen-6ow70v`,
+`experiments/character_video/` (README, prompts/recipe_clause_part3_grok.md
+for the OTS rules).
+
 ## Character episodes as Shorts (2026-11-03)
 
 "The Recipe Clause" episode 1 (made in another session on RunPod; source on
