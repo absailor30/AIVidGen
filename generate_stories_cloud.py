@@ -126,24 +126,21 @@ satisfying, karmic vindication where the narrator comes out on top."""
 # roughly four times the slots of weight 1. Nothing is dropped outright, so a
 # down-weighted theme keeps earning data and can be promoted when it does.
 # Re-derive these from story_metrics rather than trusting them indefinitely.
-# Pilot (2026-10-24): four themes chosen from the metrics (Landlord/Tenant did
-# well on few videos, Wedding is the best theme and the new wedding-party and
-# holiday ones sit next to it). They share a deliberately large slice (8 of 20)
-# until each has ~10 videos, because one video per theme says nothing -- single
-# videos swing by 5x. Then re-derive the weights from story_metrics and cut
-# whichever lost.
+# Re-derived 2026-11-26 from the 30-day theme experiment (Shorts posted
+# 2026-10-24..11-22, median day-3 views): In-Law 151, Bridesmaid 138, Holiday
+# Dinner 122, Wedding 101, Friendship 62, Family Money 46, Neighbour 37,
+# Sibling 30, Marriage 25 (but avg 83: occasional breakouts), Career 19,
+# Inheritance 8. Career, Inheritance and Sibling had no subscribers and are
+# cut. 5-17 Shorts per theme, so re-check after another month.
 THEME_WEIGHTS = {
-    "Wedding & Family Entitlement": 3,
-    "Marriage & Infidelity": 2,
-    "Sibling Rivalry & Favoritism": 2,
-    "In-Law Conflicts": 2,
-    "Career Sabotage / Workplace Betrayal": 1,
-    "Family Inheritance": 1,
-    "Friendship Betrayal & Glow-Up": 1,
-    "Neighbour & Roommate Conflicts": 2,
-    "Family Money & Borrowed Cash": 2,
-    "Bridesmaid & Wedding Party Drama": 2,
+    "In-Law Conflicts": 3,
+    "Bridesmaid & Wedding Party Drama": 3,
     "Holiday Dinner Blow-Up": 2,
+    "Wedding & Family Entitlement": 2,
+    "Marriage & Infidelity": 1,
+    "Friendship Betrayal & Glow-Up": 1,
+    "Family Money & Borrowed Cash": 1,
+    "Neighbour & Roommate Conflicts": 1,
 }
 
 THEMES = list(THEME_WEIGHTS)
