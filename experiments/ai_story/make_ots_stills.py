@@ -18,16 +18,27 @@ def grade(rgba):
     r,g,b=rgb.split(); rgb=Image.merge("RGB",(r.point(lambda v:v*0.97),g,b.point(lambda v:min(255,v*1.03))))
     rgb.putalpha(a); return rgb
 def fg_back(name, side):
-    im=cut(name); crop=im.crop((100,20,670,900)); s=1.45
-    crop=crop.resize((int(crop.width*s),int(crop.height*s)),Image.LANCZOS)
-    rgb=ImageEnhance.Brightness(crop.convert("RGB")).enhance(0.7); rgb.putalpha(crop.getchannel("A"))
-    crop=rgb.filter(ImageFilter.GaussianBlur(16))
-    x=-int(crop.width*0.45) if side=="L" else W-int(crop.width*0.55)
-    return crop,(x,H-crop.height+120)
+    # Listener's back: bigger than the speaker, close to camera, only the edge of the
+    # head and one shoulder inside the frame (~12%), tilted toward the speaker.
+    im=cut(name)                                     # full 768x1376 back view, RGBA
+    al=im.getchannel("A")
+    # head = top 22% of the figure; find its left/right extent from the alpha
+    bb=al.getbbox(); top=bb[1]
+    head=al.crop((0,top,im.width,top+int((bb[3]-top)*0.18))).getbbox()
+    s=3.0
+    big=im.resize((int(im.width*s),int(im.height*s)),Image.LANCZOS)
+    big=big.rotate(6 if side=="L" else -6, resample=Image.BICUBIC, center=(big.width//2, int(top*s)))
+    rgb=ImageEnhance.Brightness(big.convert("RGB")).enhance(0.78); rgb.putalpha(big.getchannel("A"))
+    big=rgb.filter(ImageFilter.GaussianBlur(13))
+    edge = head[2]*s if side=="L" else head[0]*s      # head edge facing the speaker
+    target = W*0.20 if side=="L" else W*0.80
+    x = int(target-edge)
+    y = int(H*0.12 - top*s)
+    return big,(x,y)
 def make(id_, speaker, flip, listener, side):
     out=bg.copy(); sp=grade(cut(speaker,flip)); s=0.76
     sp=sp.resize((int(sp.width*s),int(sp.height*s)),Image.LANCZOS)
-    out.paste(sp,((W-sp.width)//2+(120 if side=="L" else -120),H-sp.height+20),sp)
+    out.paste(sp,((W-sp.width)//2+(110 if side=="L" else -110),H-sp.height+20),sp)
     f,pos=fg_back(listener,side); out.paste(f,pos,f); out.save(f"{OUT}/{id_}.png"); print(id_,flush=True)
 jobs=[("P2_L03","eleanor_34",True,"priya_back","L"),("P2_L05","eleanor_smug",False,"priya_back","L"),
 ("P2_L08","eleanor_angry",False,"priya_back","L"),("P2_L11","eleanor_shock",False,"priya_back","L"),
