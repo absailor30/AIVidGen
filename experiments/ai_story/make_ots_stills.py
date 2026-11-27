@@ -39,7 +39,19 @@ def make(id_, speaker, flip, listener, side):
     out=bg.copy(); sp=grade(cut(speaker,flip)); s=0.76
     sp=sp.resize((int(sp.width*s),int(sp.height*s)),Image.LANCZOS)
     out.paste(sp,((W-sp.width)//2+(110 if side=="L" else -110),H-sp.height+20),sp)
-    f,pos=fg_back(listener,side); out.paste(f,pos,f); out.save(f"{OUT}/{id_}.png"); print(id_,flush=True)
+    f,pos=fg_back(listener,side)
+    # 1) soft falloff: the side nearest the listener sits in their shade
+    grad=Image.new("L",(W,1))
+    for x in range(W):
+        t=x/W if side=="L" else 1-x/W
+        grad.putpixel((x,0),int(255*min(1.0,0.55+0.45*t/0.55)))
+    grad=grad.resize((W,H)); dark=Image.new("RGB",(W,H),(18,16,20))
+    out=Image.composite(out,dark,grad)
+    # 2) cast shadow of the listener's silhouette, offset toward the speaker
+    sh=Image.new("L",(W,H),0); sh.paste(f.getchannel("A"),(pos[0]+(70 if side=="L" else -70),pos[1]+30))
+    sh=sh.filter(ImageFilter.GaussianBlur(45)).point(lambda v:int(v*0.55))
+    out=Image.composite(dark,out,sh)
+    out.paste(f,pos,f); out.save(f"{OUT}/{id_}.png"); print(id_,flush=True)
 jobs=[("P2_L03","eleanor_34",True,"priya_back","L"),("P2_L05","eleanor_smug",False,"priya_back","L"),
 ("P2_L08","eleanor_angry",False,"priya_back","L"),("P2_L11","eleanor_shock",False,"priya_back","L"),
 ("P2_L04","priya_34",True,"eleanor_back","R"),("P2_L06","priya_34",True,"eleanor_back","R"),
