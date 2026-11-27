@@ -1,0 +1,89 @@
+# THE LAST CHAIR, Part 2 — clip prompts for the HF Space
+
+Settings for every clip: Canvas `768x1344 · 9:16 full`, Steps 6, Upsample off, LoRA default (never `mystic`), no first frame. Duration and seed per clip below.
+
+Order: P2_S01, P2_S02 (VO hook), P2_L03 to P2_L10, P2_S06, P2_L11, P2_L12, P2_S07 (VO cliffhanger).
+
+## P2_S01 — 5 s, seed 501
+
+```
+Close-up on a white marble kitchen island on a grey morning: a woman's hand with a pearl ring slides a thick closed manila folder across the marble toward the camera and stops. Shallow focus, soft daylight. No faces. No one speaks; the soft scrape of paper on stone.
+```
+
+## P2_S02 — 10 s, seed 502
+
+```
+Slow push-in across Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets toward a 58-year-old white woman with a sleek silver-blonde chin-length bob, pearl necklace and a cream cardigan, who stands at the island stirring her coffee and does not look up. No one on screen speaks. A calm, warm, low female voice-over (a young woman narrating, dry and quiet, close to the microphone) says: "Monday, my mother-in-law invited me for coffee. She brought a folder." Then, after a beat: "She didn't know I'd brought one too." Soft room tone under the voice. Nobody looks at the camera.
+```
+
+## P2_L03 — 5 s, seed 510
+
+```
+Over-the-shoulder shot in Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets. In sharp focus facing the camera: a 58-year-old white woman with a sleek silver-blonde chin-length bob, pearl necklace and a cream cardigan. In the soft, out-of-focus foreground on the LEFT edge: the shoulder and long black hair of a young woman in a lavender blouse, seen from behind. They speak coolly, in a polished clipped voice, tapping the folder, lips clearly forming every word: "Sit down, Priya. This won't take long." Cinematic, shallow depth of field, subtle camera drift, no cut, no zoom. Only this one person speaks; no music, no other voices. Nobody looks at the camera.
+```
+
+## P2_L04 — 6 s, seed 511
+
+```
+Over-the-shoulder shot in Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets. In sharp focus facing the camera: a 28-year-old South Asian-American woman with long straight black hair in a lavender blouse. In the soft, out-of-focus foreground on the RIGHT edge: the shoulder and silver-blonde bob of an older woman in a cream cardigan, seen from behind. They speak calmly, in a warm low voice, unbothered, lips clearly forming every word: "Is that the paper Ethan signed? I've already read it." Cinematic, shallow depth of field, subtle camera drift, no cut, no zoom. Only this one person speaks; no music, no other voices. Nobody looks at the camera.
+```
+
+## P2_L05 — 8 s, seed 512
+
+```
+Over-the-shoulder shot in Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets. In sharp focus facing the camera: a 58-year-old white woman with a sleek silver-blonde chin-length bob, pearl necklace and a cream cardigan. In the soft, out-of-focus foreground on the LEFT edge: the shoulder and long black hair of a young woman in a lavender blouse, seen from behind. They speak with a thin smile, in a polished clipped voice, lips clearly forming every word: "Then you know the house was a gift. Gifts can be taken back." Cinematic, shallow depth of field, subtle camera drift, no cut, no zoom. Only this one person speaks; no music, no other voices. Nobody looks at the camera.
+```
+
+## P2_L06 — 5 s, seed 513
+
+```
+Over-the-shoulder shot in Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets. In sharp focus facing the camera: a 28-year-old South Asian-American woman with long straight black hair in a lavender blouse. In the soft, out-of-focus foreground on the RIGHT edge: the shoulder and silver-blonde bob of an older woman in a cream cardigan, seen from behind. They speak quietly, leaning in slightly, in a warm low voice, lips clearly forming every word: "A gift? You borrowed against it. Twice." Cinematic, shallow depth of field, subtle camera drift, no cut, no zoom. Only this one person speaks; no music, no other voices. Nobody looks at the camera.
+```
+
+## P2_L07 — 5 s, seed 514
+
+```
+Over-the-shoulder shot in Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets. In sharp focus facing the camera: a 32-year-old man with short brown hair in a light-blue shirt, tie loosened. In the soft, out-of-focus foreground on the LEFT edge: the shoulder and long black hair of a young woman in a lavender blouse, seen from behind. They speak tired and shaken, in a soft hesitant voice, lips clearly forming every word: "Mom... the bank called me. Not her. Me." Cinematic, shallow depth of field, subtle camera drift, no cut, no zoom. Only this one person speaks; no music, no other voices. Nobody looks at the camera.
+```
+
+## P2_L08 — 5 s, seed 515
+
+```
+Over-the-shoulder shot in Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets. In sharp focus facing the camera: a 58-year-old white woman with a sleek silver-blonde chin-length bob, pearl necklace and a cream cardigan. In the soft, out-of-focus foreground on the LEFT edge: the shoulder and long black hair of a young woman in a lavender blouse, seen from behind. They speak sharply, the smile slipping, a warning, lips clearly forming every word: "Ethan, sweetheart, don't." Cinematic, shallow depth of field, subtle camera drift, no cut, no zoom. Only this one person speaks; no music, no other voices. Nobody looks at the camera.
+```
+
+## P2_L09 — 5 s, seed 516
+
+```
+Over-the-shoulder shot in Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets. In sharp focus facing the camera: a 28-year-old South Asian-American woman with long straight black hair in a lavender blouse. In the soft, out-of-focus foreground on the RIGHT edge: the shoulder and silver-blonde bob of an older woman in a cream cardigan, seen from behind. They speak very still and measured, in a warm low voice, a quiet threat, lips clearly forming every word: "Tell her who the second loan was for." Cinematic, shallow depth of field, subtle camera drift, no cut, no zoom. Only this one person speaks; no music, no other voices. Nobody looks at the camera.
+```
+
+## P2_L10 — 7 s, seed 517
+
+```
+Over-the-shoulder shot in Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets. In sharp focus facing the camera: a 32-year-old man with short brown hair in a light-blue shirt, tie loosened. In the soft, out-of-focus foreground on the LEFT edge: the shoulder and long black hair of a young woman in a lavender blouse, seen from behind. They speak low and ashamed, then looking up, in a soft voice, lips clearly forming every word: "It was for you, Mom. Your debts. Priya paid those off too." Cinematic, shallow depth of field, subtle camera drift, no cut, no zoom. Only this one person speaks; no music, no other voices. Nobody looks at the camera.
+```
+
+## P2_L11 — 5 s, seed 518
+
+```
+Over-the-shoulder shot in Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets. In sharp focus facing the camera: a 58-year-old white woman with a sleek silver-blonde chin-length bob, pearl necklace and a cream cardigan. In the soft, out-of-focus foreground on the LEFT edge: the shoulder and long black hair of a young woman in a lavender blouse, seen from behind. They speak in a stunned whisper, lips clearly forming every word: "She told you that?" Cinematic, shallow depth of field, subtle camera drift, no cut, no zoom. Only this one person speaks; no music, no other voices. Nobody looks at the camera.
+```
+
+## P2_L12 — 5 s, seed 519
+
+```
+Over-the-shoulder shot in Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets. In sharp focus facing the camera: a 28-year-old South Asian-American woman with long straight black hair in a lavender blouse. In the soft, out-of-focus foreground on the RIGHT edge: the shoulder and silver-blonde bob of an older woman in a cream cardigan, seen from behind. They speak softly, with no anger, in a warm low voice, lips clearly forming every word: "I didn't have to. The receipts did." Cinematic, shallow depth of field, subtle camera drift, no cut, no zoom. Only this one person speaks; no music, no other voices. Nobody looks at the camera.
+```
+
+## P2_S06 — 5 s, seed 530
+
+```
+Close-up of an older woman's hand with a pearl ring gripping a white coffee cup on a marble counter, the coffee trembling, soft daylight. No one speaks; a faint clink of china.
+```
+
+## P2_S07 — 10 s, seed 531
+
+```
+In Eleanor's bright kitchen on a grey Monday morning: white marble island, two coffee cups, a closed manila folder, soft window daylight, cream cabinets: a 28-year-old South Asian-American woman with long straight black hair in a lavender blouse calmly opens her own slim folder on the island and slides one receipt across to a 58-year-old white woman with a sleek silver-blonde chin-length bob, pearl necklace and a cream cardigan, who stares at it, frozen; a 32-year-old man with short brown hair in a light-blue shirt, tie loosened stands behind them, silent. Slow pull-out. No one on screen speaks. A calm, warm, low female voice-over (a young woman narrating, dry and quiet, close to the microphone) says: "She smiled at me then. That's when I knew the loans weren't her only secret." Soft room tone under the voice. Nobody looks at the camera.
+```
