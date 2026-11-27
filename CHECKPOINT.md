@@ -176,22 +176,51 @@ Same day the owner cut to the top three only (In-Law 3, Bridesmaid 3,
 Holiday Dinner 2) and to one Short a day. Re-check around 2026-12-26. Recipe Clause ep1 parts ended at 21/24/22/19/35
 views: viewers came back, but reach is a fraction of a stock Short.
 
-## AI-only stories (planned 2026-11-26)
+## AI-only stories (pilot #1 posted 2026-11-26)
 
-Owner wants every story fully AI-made on RunPod (no stock footage), written by
-us, clips generated on the pod, voiced and stitched. No Flow or Grok: the
-character refs are on the RunPod volume (`/workspace`), and stills are made on
-the pod too. Pilot #1 script and over-the-shoulder shot list:
-`experiments/ai_story/the_last_chair.md` (In-Law at Thanksgiving; cast roles
-are renamed to fit whichever refs are on the volume). Blocked on pod access:
-either the owner starts the pod with
-`bash /workspace/start.sh --mcp-webui --mcp-port 8000 --mcp-allow-read-file-system`
-plus `tunnel_mcp.sh` and sends the trycloudflare URL, or a RunPod API key is
-added as a network secret for host `rest.runpod.io` (Bearer) in the cloud
-environment's settings, so Claude can start/stop pods itself. Prior pod work
-and its lessons: branch `claude/short-story-tier-4-aividgen-6ow70v`,
-`experiments/character_video/` (README, prompts/recipe_clause_part3_grok.md
-for the OTS rules).
+Owner wants every story fully AI-made (no stock footage): we write it, clips are
+generated on RunPod, stitched and posted. No Flow or Grok.
+
+**Pilot #1, "The Last Chair"** (In-Law at Thanksgiving; script and OTS shot list
+`experiments/ai_story/the_last_chair.md`). Posted 2026-11-26:
+YouTube https://youtube.com/shorts/fiQFrs9n-dc (public 22:30 UTC), Instagram
+Reel media id 18100854107682333. Final file `experiments/ai_story/the_last_chair_final.mp4`
+(1:10, 1080x1920, 1.3x speed, burned captions). Owner verdict: "ruined", mainly
+dialogue delivery; posted anyway.
+
+**How it was made (branch `claude/video-story-posting-debug-qb1ex2`):**
+- Model: MiniMax-H3 (joint video + voice in one pass, 5-15 s, 24 fps) + Turbo
+  LoRA `larryvrh/MiniMax-H3-Turbo-Lora` (6 steps), the same stack as the owner's
+  private HF Space `absailor/MiniMax-H3-Turbo-Lora-UNCENSORED-Workflow`.
+  Its `mystic` LoRA is NSFW: keep `H3_MYSTIC=off`.
+- Runner `experiments/ai_story/run_h3.py`, prompts `experiments/ai_story/jobs_the_last_chair.json`.
+  Two phases: Qwen3-VL conditioner encodes every prompt (cached to *.enc.pt),
+  then the generator. Point `modular_model_index.json` at the local model dir or
+  it re-downloads into the HF cache (that filled the disk once).
+- Hardware that works: 1x RTX PRO 6000 96 GB (bf16, fully resident, 72 GiB).
+  768x1344: ~66 s per 5 s clip, ~125 s per 8 s clip. Use default SDPA attention
+  (`_native_cudnn` failed). `hf download` of `transformer/*` silently skips the
+  shards: download `transformer/diffusion_pytorch_model-*` separately.
+- What failed: 2x A40 (pod RAM capped at 100 GB, 135 GB of weights; streaming
+  ran at ~1% GPU). HF ZeroGPU via the Space: "pool at capacity".
+- Pod control: a key-protected command server on port 8888 (owner approved),
+  started via the pod's dockerArgs. RunPod GraphQL (`api.runpod.io/graphql`)
+  works with the "Runpod API" secret; `rest.runpod.io` returns 502.
+- edge-tts here needs the proxy CA: monkeypatch `certifi.where` to
+  `/root/.ccr/ca-bundle.crt`.
+- Posting: YouTube via post_episode_parts.yml (manifest
+  `episodes/the_last_chair_p1.json`), Instagram via publish_episode.yml
+  (kit `episodes/the_last_chair_kit.json`), both dispatched on this branch.
+
+**Cost of pilot #1:** about $3.50 of RunPod (2x A40 ~1 h at $1.18, RTX PRO 6000
+~50 min at $2.69, a few seconds of two cancelled pods). RunPod balance after:
+$6.07. All pods from this work are terminated, disks deleted.
+
+**Next time:** drive delivery with audio: TTS (or a cloned voice) per line first,
+then an audio-driven lip-sync model, instead of letting the model invent the
+acting. Give each character a fixed first-frame reference image so faces stay
+consistent (we had none; all text-to-video). Put narration in the model prompt
+as voice-over so it matches the voices. Part 2 is promised "Monday".
 
 ## Character episodes as Shorts (2026-11-03)
 
