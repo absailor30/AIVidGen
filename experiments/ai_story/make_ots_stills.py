@@ -28,7 +28,7 @@ def fg_back(name, side):
     s=3.0
     big=im.resize((int(im.width*s),int(im.height*s)),Image.LANCZOS)
     big=big.rotate(6 if side=="L" else -6, resample=Image.BICUBIC, center=(big.width//2, int(top*s)))
-    rgb=ImageEnhance.Brightness(big.convert("RGB")).enhance(0.78); rgb.putalpha(big.getchannel("A"))
+    rgb=ImageEnhance.Brightness(big.convert("RGB")).enhance(0.5); rgb=ImageEnhance.Color(rgb).enhance(0.7); rgb.putalpha(big.getchannel("A"))
     big=rgb.filter(ImageFilter.GaussianBlur(13))
     edge = head[2]*s if side=="L" else head[0]*s      # head edge facing the speaker
     target = W*0.20 if side=="L" else W*0.80
