@@ -1,6 +1,6 @@
 {
   "source": "experiments/ai_story/the_last_chair_final.mp4: AI-only pilot #1, MiniMax-H3 on RunPod, 1.3x, captions",
-  "files_ref": "claude/video-story-posting-debug-qb1ex2",
+  "files_ref": "previews",
   "files_dir": "episodes/the_last_chair",
   "publish_hour_utc": "22:30",
   "first_day": "2026-11-26",

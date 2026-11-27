@@ -188,7 +188,7 @@ Reel media id 18100854107682333. Final file `experiments/ai_story/the_last_chair
 (1:10, 1080x1920, 1.3x speed, burned captions). Owner verdict: "ruined", mainly
 dialogue delivery; posted anyway.
 
-**How it was made (branch `claude/video-story-posting-debug-qb1ex2`):**
+**How it was made (code on main; videos on branch `previews`):**
 - Model: MiniMax-H3 (joint video + voice in one pass, 5-15 s, 24 fps) + Turbo
   LoRA `larryvrh/MiniMax-H3-Turbo-Lora` (6 steps), the same stack as the owner's
   private HF Space `absailor/MiniMax-H3-Turbo-Lora-UNCENSORED-Workflow`.
@@ -210,7 +210,7 @@ dialogue delivery; posted anyway.
   `/root/.ccr/ca-bundle.crt`.
 - Posting: YouTube via post_episode_parts.yml (manifest
   `episodes/the_last_chair_p1.json`), Instagram via publish_episode.yml
-  (kit `episodes/the_last_chair_kit.json`), both dispatched on this branch.
+  (kit `episodes/the_last_chair_kit.json`), media on `previews`.
 
 **Cost of pilot #1:** about $3.50 of RunPod (2x A40 ~1 h at $1.18, RTX PRO 6000
 ~50 min at $2.69, a few seconds of two cancelled pods). RunPod balance after:
