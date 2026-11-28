@@ -1,6 +1,6 @@
 {
   "source": "experiments/ai_story/the_last_chair_p3_final_cta.mp4: AI-only pilot #1 part 3 (finale), 1.3x, captions, end card",
-  "files_ref": "claude/video-story-posting-debug-qb1ex2",
+  "files_ref": "previews",
   "files_dir": "episodes/the_last_chair_p3",
   "publish_hour_utc": "15:15",
   "first_day": "2026-11-30",
