@@ -176,51 +176,52 @@ Same day the owner cut to the top three only (In-Law 3, Bridesmaid 3,
 Holiday Dinner 2) and to one Short a day. Re-check around 2026-12-26. Recipe Clause ep1 parts ended at 21/24/22/19/35
 views: viewers came back, but reach is a fraction of a stock Short.
 
-## AI-only stories (pilot #1 posted 2026-11-26)
+## AI-only stories: The Last Chair, 3 parts (2026-11-26 to 2026-11-30)
 
 Owner wants every story fully AI-made (no stock footage): we write it, clips are
-generated on RunPod, stitched and posted. No Flow or Grok.
+generated on RunPod, stitched and posted. No Flow or Grok. Pilot #1 "The Last
+Chair" (In-Law, Thanksgiving) ran as a 3-part series:
 
-**Pilot #1, "The Last Chair"** (In-Law at Thanksgiving; script and OTS shot list
-`experiments/ai_story/the_last_chair.md`). Posted 2026-11-26:
-YouTube https://youtube.com/shorts/fiQFrs9n-dc (public 22:30 UTC), Instagram
-Reel media id 18100854107682333. Final file `experiments/ai_story/the_last_chair_final.mp4`
-(1:10, 1080x1920, 1.3x speed, burned captions). Owner verdict: "ruined", mainly
-dialogue delivery; posted anyway.
+| Part | YouTube | Instagram | Notes |
+|---|---|---|---|
+| 1 | https://youtube.com/shorts/fiQFrs9n-dc | Reel 18100854107682333 | text-only clips; owner: "ruined" (delivery) |
+| 2 | https://youtube.com/shorts/z6RrmKm_2aY | reposted with end card | first frames from Qwen stills |
+| 3 (finale) | https://youtube.com/shorts/ytw8kUe1rCA, public 2026-11-30 15:15 UTC | scheduled task in this session posts it 2026-11-30 15:15 UTC | if it did not post, dispatch publish_episode.yml (source_ref previews, video episodes/the_last_chair_p3/part1.mp4, kit episodes/the_last_chair_p3_kit.json) |
 
-**How it was made (code on main; videos on branch `previews`):**
-- Model: MiniMax-H3 (joint video + voice in one pass, 5-15 s, 24 fps) + Turbo
-  LoRA `larryvrh/MiniMax-H3-Turbo-Lora` (6 steps), the same stack as the owner's
-  private HF Space `absailor/MiniMax-H3-Turbo-Lora-UNCENSORED-Workflow`.
-  Its `mystic` LoRA is NSFW: keep `H3_MYSTIC=off`.
-- Runner `experiments/ai_story/run_h3.py`, prompts `experiments/ai_story/jobs_the_last_chair.json`.
-  Two phases: Qwen3-VL conditioner encodes every prompt (cached to *.enc.pt),
-  then the generator. Point `modular_model_index.json` at the local model dir or
-  it re-downloads into the HF cache (that filled the disk once).
-- Hardware that works: 1x RTX PRO 6000 96 GB (bf16, fully resident, 72 GiB).
-  768x1344: ~66 s per 5 s clip, ~125 s per 8 s clip. Use default SDPA attention
-  (`_native_cudnn` failed). `hf download` of `transformer/*` silently skips the
-  shards: download `transformer/diffusion_pytorch_model-*` separately.
-- What failed: 2x A40 (pod RAM capped at 100 GB, 135 GB of weights; streaming
-  ran at ~1% GPU). HF ZeroGPU via the Space: "pool at capacity".
-- Pod control: a key-protected command server on port 8888 (owner approved),
-  started via the pod's dockerArgs. RunPod GraphQL (`api.runpod.io/graphql`)
-  works with the "Runpod API" secret; `rest.runpod.io` returns 502.
-- edge-tts here needs the proxy CA: monkeypatch `certifi.where` to
-  `/root/.ccr/ca-bundle.crt`.
-- Posting: YouTube via post_episode_parts.yml (manifest
-  `episodes/the_last_chair_p1.json`), Instagram via publish_episode.yml
-  (kit `episodes/the_last_chair_kit.json`), media on `previews`.
+Scripts and prompts: `experiments/ai_story/the_last_chair.md`, `the_last_chair_part2.md`,
+`the_last_chair_part3.md`, run job lists `jobs_the_last_chair*.json`. All clips,
+stills, cuts and posted mp4s are on branch `previews` (same paths).
 
-**Cost of pilot #1:** about $3.50 of RunPod (2x A40 ~1 h at $1.18, RTX PRO 6000
-~50 min at $2.69, a few seconds of two cancelled pods). RunPod balance after:
-$6.07. All pods from this work are terminated, disks deleted.
+**Pipeline that works (one RTX PRO 6000 96 GB, ~$2.69/h, ~$2.50-3 per part with setup):**
+1. Cast photos: `experiments/ai_story/refs/cast/` (owner's studio refs: eleanor/priya/ethan
+   _34, expressions, _back). Owner does not want new character images invented.
+2. First-frame stills: Qwen-Image-Edit-2509 + Lightning 8-step LoRA
+   (`experiments/ai_story/qwen_stills.py`, jobs `qwen_stills_jobs.json`): image 1 = speaker
+   photo, image 2 = listener back view; ~9 s/still on the PRO 6000. Resize condition images
+   to 384x384 area before encode_prompt (else it ignores the photos). The model keeps the
+   speaker small; crop 72% width toward the listener side (crop3 logic in the job notes).
+   Owner rejected hand-made composites ("pasted", "randomly darkened").
+3. Clips: MiniMax-H3 + Turbo LoRA (`experiments/ai_story/run_h3.py`), 768x1344, 6 steps,
+   ~70 s per 5 s clip. Prompt starts "Keep this exact framing, faces and lighting from the
+   first frame."; narration goes in the prompt as voice-over (matches voices).
+   Needs torch 2.11 cu130, diffusers @665f578, and
+   LD_LIBRARY_PATH=.../nvidia/cu13/lib (else nvrtc builtins error). Duration 5-15 s only.
+4. Finish: concat, -14 LUFS, 1.3x (setpts + atempo), ASS captions in 4-word chunks in the
+   bottom third, scale to 1080x1920, end card (CTA for next part), thumbnail.
+5. Post: post_episode_parts.yml (manifest `episodes/the_last_chair_p*.json`, supports
+   "thumbnail" on upload and "set_thumbnails" for existing videos) and
+   publish_episode.yml for Instagram (no scheduling in the IG API).
 
-**Next time:** drive delivery with audio: TTS (or a cloned voice) per line first,
-then an audio-driven lip-sync model, instead of letting the model invent the
-acting. Give each character a fixed first-frame reference image so faces stay
-consistent (we had none; all text-to-video). Put narration in the model prompt
-as voice-over so it matches the voices. Part 2 is promised "Monday".
+**Pod control:** key-protected command server on port 8888 via dockerArgs (owner approved).
+RunPod GraphQL works with the "Runpod API" secret. Do not edit owner's old pods without
+asking. 2x A40 fails (100 GB RAM cap). Pods' RAM caps: A6000 50 GB, PRO 6000 188 GB.
+HF ZeroGPU Spaces were unusable from scripts (anonymous quota, server TypeErrors).
+
+**Spend:** RunPod ~$11 across the three parts and tests; balance $3.18 on 2026-11-28 (top
+up before the next story). All pods from this work terminated, disks deleted.
+
+**Next:** watch retention on the 3 parts; next story next week. Delivery is the weak spot:
+consider TTS per line + audio-driven lip-sync instead of the model's own voices.
 
 ## Character episodes as Shorts (2026-11-03)
 

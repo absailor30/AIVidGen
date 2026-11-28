@@ -17,8 +17,23 @@ import sys
 from render_from_supabase import upload_to_youtube
 
 
+def set_thumbnails(manifest: dict, files_dir: str):
+    """Manifest {"set_thumbnails": [[youtube_id, "thumb.jpg"], ...]}: set custom
+    thumbnails on videos that are already up, without uploading anything."""
+    from googleapiclient.discovery import build
+    from render_from_supabase import _youtube_credentials
+    from thumbnail import set_thumbnail
+    youtube = build("youtube", "v3", credentials=_youtube_credentials())
+    for vid, name in manifest["set_thumbnails"]:
+        set_thumbnail(youtube, vid, os.path.join(files_dir, name))
+        print(f"[episode] Thumbnail set on https://youtube.com/shorts/{vid}")
+
+
 def main():
     manifest = json.load(open(sys.argv[1]))
+    if manifest.get("set_thumbnails"):
+        set_thumbnails(manifest, sys.argv[2] if len(sys.argv) > 2 else manifest["files_dir"])
+        return
     parts_dir = sys.argv[2] if len(sys.argv) > 2 else manifest["files_dir"]
     files = sorted(glob.glob(os.path.join(parts_dir, "part*.mp4")))
     if not files:
@@ -36,6 +51,13 @@ def main():
         }
         os.environ["YOUTUBE_PUBLISH_AT"] = when.strftime("%Y-%m-%dT%H:%M:%SZ")
         vid = upload_to_youtube(path, kit)
+        if vid and manifest.get("thumbnail"):
+            from googleapiclient.discovery import build
+            from render_from_supabase import _youtube_credentials
+            from thumbnail import set_thumbnail
+            set_thumbnail(build("youtube", "v3", credentials=_youtube_credentials()), vid,
+                          os.path.join(parts_dir, manifest["thumbnail"]))
+            print(f"[episode] Thumbnail set on {vid}")
         print(f"[episode] Part {i}/{total}: https://youtube.com/shorts/{vid} "
               f"goes public {os.environ['YOUTUBE_PUBLISH_AT']}")
 
