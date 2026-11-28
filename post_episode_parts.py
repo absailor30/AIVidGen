@@ -51,6 +51,13 @@ def main():
         }
         os.environ["YOUTUBE_PUBLISH_AT"] = when.strftime("%Y-%m-%dT%H:%M:%SZ")
         vid = upload_to_youtube(path, kit)
+        if vid and manifest.get("thumbnail"):
+            from googleapiclient.discovery import build
+            from render_from_supabase import _youtube_credentials
+            from thumbnail import set_thumbnail
+            set_thumbnail(build("youtube", "v3", credentials=_youtube_credentials()), vid,
+                          os.path.join(parts_dir, manifest["thumbnail"]))
+            print(f"[episode] Thumbnail set on {vid}")
         print(f"[episode] Part {i}/{total}: https://youtube.com/shorts/{vid} "
               f"goes public {os.environ['YOUTUBE_PUBLISH_AT']}")
 
