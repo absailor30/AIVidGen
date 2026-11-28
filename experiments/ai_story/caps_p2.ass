@@ -1,0 +1,42 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 768
+PlayResY: 1344
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Cap,DejaVu Sans,46,&H00FFFFFF,&H00FFFFFF,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,1,2,40,40,300,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:04.37,0:00:05.93,Cap,,0,0,0,,MONDAY, MY MOTHER-IN-LAW INVITED
+Dialogue: 0,0:00:05.93,0:00:07.49,Cap,,0,0,0,,ME FOR COFFEE. SHE
+Dialogue: 0,0:00:07.49,0:00:08.65,Cap,,0,0,0,,BROUGHT A FOLDER.
+Dialogue: 0,0:00:08.65,0:00:10.21,Cap,,0,0,0,,SHE DIDN'T KNOW I'D
+Dialogue: 0,0:00:10.21,0:00:11.38,Cap,,0,0,0,,BROUGHT ONE TOO.
+Dialogue: 0,0:00:12.00,0:00:14.05,Cap,,0,0,0,,SIT DOWN, PRIYA. THIS
+Dialogue: 0,0:00:14.05,0:00:15.60,Cap,,0,0,0,,WON'T TAKE LONG.
+Dialogue: 0,0:00:15.98,0:00:17.85,Cap,,0,0,0,,IS THAT THE PAPER
+Dialogue: 0,0:00:17.85,0:00:19.72,Cap,,0,0,0,,ETHAN SIGNED? I'VE ALREADY
+Dialogue: 0,0:00:19.72,0:00:20.66,Cap,,0,0,0,,READ IT.
+Dialogue: 0,0:00:21.04,0:00:22.82,Cap,,0,0,0,,THEN YOU KNOW THE
+Dialogue: 0,0:00:22.82,0:00:24.60,Cap,,0,0,0,,HOUSE WAS A GIFT.
+Dialogue: 0,0:00:24.60,0:00:26.37,Cap,,0,0,0,,GIFTS CAN BE TAKEN
+Dialogue: 0,0:00:26.37,0:00:26.81,Cap,,0,0,0,,BACK.
+Dialogue: 0,0:00:27.20,0:00:29.25,Cap,,0,0,0,,A GIFT? YOU BORROWED
+Dialogue: 0,0:00:29.25,0:00:30.79,Cap,,0,0,0,,AGAINST IT. TWICE.
+Dialogue: 0,0:00:31.18,0:00:32.98,Cap,,0,0,0,,MOM... THE BANK CALLED
+Dialogue: 0,0:00:32.98,0:00:34.78,Cap,,0,0,0,,ME. NOT HER. ME.
+Dialogue: 0,0:00:35.16,0:00:38.76,Cap,,0,0,0,,ETHAN, SWEETHEART, DON'T.
+Dialogue: 0,0:00:39.14,0:00:40.94,Cap,,0,0,0,,TELL HER WHO THE
+Dialogue: 0,0:00:40.94,0:00:42.74,Cap,,0,0,0,,SECOND LOAN WAS FOR.
+Dialogue: 0,0:00:43.12,0:00:44.87,Cap,,0,0,0,,IT WAS FOR YOU,
+Dialogue: 0,0:00:44.87,0:00:46.61,Cap,,0,0,0,,MOM. YOUR DEBTS. PRIYA
+Dialogue: 0,0:00:46.61,0:00:48.35,Cap,,0,0,0,,PAID THOSE OFF TOO.
+Dialogue: 0,0:00:52.72,0:00:56.31,Cap,,0,0,0,,SHE TOLD YOU THAT?
+Dialogue: 0,0:00:56.70,0:00:58.75,Cap,,0,0,0,,I DIDN'T HAVE TO.
+Dialogue: 0,0:00:58.75,0:01:00.29,Cap,,0,0,0,,THE RECEIPTS DID.
+Dialogue: 0,0:01:00.83,0:01:02.71,Cap,,0,0,0,,SHE SMILED AT ME
+Dialogue: 0,0:01:02.71,0:01:04.58,Cap,,0,0,0,,THEN. THAT'S WHEN I
+Dialogue: 0,0:01:04.58,0:01:06.45,Cap,,0,0,0,,KNEW THE LOANS WEREN'T
+Dialogue: 0,0:01:06.45,0:01:07.85,Cap,,0,0,0,,HER ONLY SECRET.
